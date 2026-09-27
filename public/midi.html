@@ -80,6 +80,53 @@
         <div id="midiMonitor" class="midi-monitor">Press a key or move a control…</div>
       </section>
 
+      <section id="padsPanel" class="panel admin-panel">
+        <div class="panel-head bare">
+          <h2>On-screen MIDI pads</h2>
+          <span>Works on any phone or tablet, including iPhone</span>
+        </div>
+        <p class="help-text">Tap a pad to send that note to QLab, exactly as if you'd played it on a keyboard. Hold it down for a longer note.</p>
+        <div class="pad-controls">
+          <label>
+            <span>Channel</span>
+            <select id="padChannel"></select>
+          </label>
+          <label>
+            <span>Velocity <output id="padVelocityValue">100</output></span>
+            <input id="padVelocity" type="range" min="1" max="127" value="100">
+          </label>
+          <div class="octave-control">
+            <span class="label">Octave</span>
+            <div>
+              <button id="octaveDown" type="button" class="secondary" aria-label="Octave down">−</button>
+              <strong id="octaveLabel">C4–B5</strong>
+              <button id="octaveUp" type="button" class="secondary" aria-label="Octave up">+</button>
+            </div>
+          </div>
+        </div>
+        <div id="padGrid" class="pad-grid" aria-label="MIDI note pads"></div>
+        <div class="pad-extra">
+          <form id="programForm" class="pad-send">
+            <label>
+              <span>Program change</span>
+              <input name="program" type="number" min="0" max="127" value="0" inputmode="numeric">
+            </label>
+            <button type="submit" class="secondary">Send</button>
+          </form>
+          <form id="ccForm" class="pad-send">
+            <label>
+              <span>CC number</span>
+              <input name="cc" type="number" min="0" max="127" value="64" inputmode="numeric">
+            </label>
+            <label>
+              <span>Value</span>
+              <input name="value" type="number" min="0" max="127" value="127" inputmode="numeric">
+            </label>
+            <button type="submit" class="secondary">Send</button>
+          </form>
+        </div>
+      </section>
+
       <section id="mappingsPanel" class="panel admin-panel">
         <div class="panel-head bare">
           <h2>Mappings</h2>

@@ -15,6 +15,14 @@ const learnButton = $("#learnButton");
 const mappingMessage = $("#mappingMessage");
 const mappingList = $("#mappingList");
 const passthroughPanel = $("#passthroughPanel");
+const padsPanel = $("#padsPanel");
+const padGrid = $("#padGrid");
+const padChannel = $("#padChannel");
+const padVelocity = $("#padVelocity");
+const OCTAVE_KEY = "qlab-midi-pad-base";
+const PAD_COUNT = 24;
+const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const mappingsPanel = $("#mappingsPanel");
 const outputSelect = $("#midiOutputSelect");
 const outputStatus = $("#midiOutputStatus");
@@ -78,6 +86,7 @@ subscribeState("midi", (state, online) => {
 });
 
 await loadSettings();
+setupPads();
 applyMode();
 loadOutputs();
 connectSocket();
@@ -85,6 +94,7 @@ checkEnvironment();
 
 function applyMode() {
   passthroughPanel.hidden = mode !== "passthrough";
+  padsPanel.hidden = mode !== "passthrough";
   mappingsPanel.hidden = mode !== "mappings";
 }
 
@@ -172,15 +182,26 @@ async function loadSettings() {
 async function checkEnvironment() {
   if (typeof navigator.requestMIDIAccess !== "function" || !window.isSecureContext) {
     startButton.disabled = true;
-    if (!window.isSecureContext) {
+    if (typeof navigator.requestMIDIAccess !== "function") {
+      // Every iPhone/iPad browser (Chrome included) uses Safari's engine, which has no Web MIDI.
+      secureNotice.textContent = isIos
+        ? "iPhone and iPad browsers can't read a plugged-in MIDI keyboard (Apple doesn't allow Web MIDI, even in Chrome). Use the on-screen pads below: they send real MIDI to QLab."
+        : "This browser can't read MIDI devices. Use the on-screen pads below, or open this page in Chrome or Edge on a laptop to use a keyboard.";
+      // Nothing to connect on this device, so get the pads closer to the top.
+      startButton.hidden = true;
+      inputsEl.hidden = true;
+      inputsEl.previousElementSibling.hidden = true;
+      mode = "passthrough";
+      for (const radio of document.querySelectorAll("[name=midiMode]")) radio.checked = radio.value === mode;
+      applyMode();
+    } else if (!window.isSecureContext) {
       const network = await fetch("/api/admin/network").then((response) => response.json()).catch(() => ({}));
       const httpsUrl = network.httpsPort ? `https://${location.hostname}:${network.httpsPort}/midi.html` : "";
       secureNotice.innerHTML = httpsUrl
-        ? `Browsers only allow MIDI on secure pages. Open <a href="${escapeHtml(httpsUrl)}">${escapeHtml(httpsUrl)}</a> instead.
-           The first time, your browser will warn about the self-signed certificate: choose “Advanced” → “Proceed”.`
+        ? `To use a plugged-in MIDI keyboard, open <a href="${escapeHtml(httpsUrl)}">${escapeHtml(httpsUrl)}</a> instead
+           (browsers only allow MIDI devices on secure pages; the first time, choose “Advanced” → “Proceed” on the certificate warning).
+           The on-screen pads below work on this page.`
         : "Browsers only allow MIDI on secure (HTTPS) pages. Enable HTTPS on the server (HTTPS_PORT) and open this page over https://.";
-    } else {
-      secureNotice.textContent = "This browser has no Web MIDI support. Use Chrome, Edge, Opera or Firefox on a laptop, desktop or Android device (Safari and iPhone/iPad don't support Web MIDI).";
     }
     secureNotice.hidden = false;
     accessStatus.textContent = "Unavailable";
@@ -379,6 +400,84 @@ function renderMappings() {
           <button type="button" class="secondary" data-remove="${escapeHtml(mapping.id)}">Remove</button>
         </div>`).join("")
     : "No mappings yet. Use “Learn from MIDI” or add the starter layout (C4 = GO).";
+}
+
+// --- On-screen pads: send MIDI through the same pass-through, for devices without Web MIDI ---
+
+function setupPads() {
+  padChannel.innerHTML = Array.from({ length: 16 }, (_, index) =>
+    `<option value="${index + 1}">${index + 1}</option>`).join("");
+  padChannel.value = String(readStored("qlab-midi-pad-channel", 1));
+  padChannel.addEventListener("change", () => writeStored("qlab-midi-pad-channel", Number(padChannel.value)));
+  padVelocity.addEventListener("input", () => {
+    $("#padVelocityValue").textContent = padVelocity.value;
+  });
+
+  let base = readStored(OCTAVE_KEY, 60);
+  const renderGrid = () => {
+    base = Math.max(0, Math.min(128 - PAD_COUNT, base));
+    writeStored(OCTAVE_KEY, base);
+    $("#octaveLabel").textContent = `${noteName(base)}–${noteName(base + PAD_COUNT - 1)}`;
+    padGrid.innerHTML = Array.from({ length: PAD_COUNT }, (_, index) => {
+      const note = base + index;
+      const sharp = NOTE_NAMES[note % 12].includes("#");
+      return `<button type="button" class="pad ${sharp ? "pad-sharp" : ""}" data-note="${note}">
+        <strong>${noteName(note)}</strong><span>${note}</span>
+      </button>`;
+    }).join("");
+  };
+  $("#octaveDown").addEventListener("click", () => { base -= 12; renderGrid(); });
+  $("#octaveUp").addEventListener("click", () => { base += 12; renderGrid(); });
+  renderGrid();
+
+  const held = new Map();
+  padGrid.addEventListener("pointerdown", (event) => {
+    const pad = event.target.closest(".pad");
+    if (!pad) return;
+    event.preventDefault();
+    pad.setPointerCapture?.(event.pointerId);
+    const channel = Number(padChannel.value) - 1;
+    const note = Number(pad.dataset.note);
+    held.set(event.pointerId, { pad, channel, note });
+    pad.classList.add("down");
+    sendPad([0x90 | channel, note, Number(padVelocity.value)], `Note ${noteName(note)} (${note}) ch ${channel + 1}`);
+  });
+  const release = (event) => {
+    const hold = held.get(event.pointerId);
+    if (!hold) return;
+    held.delete(event.pointerId);
+    hold.pad.classList.remove("down");
+    sendPad([0x80 | hold.channel, hold.note, 0], null);
+  };
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) padGrid.addEventListener(type, release);
+  padGrid.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  $("#programForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const channel = Number(padChannel.value) - 1;
+    const program = clampMidi(event.target.elements.program.value);
+    sendPad([0xc0 | channel, program], `Program ${program} ch ${channel + 1}`);
+  });
+  $("#ccForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const channel = Number(padChannel.value) - 1;
+    const cc = clampMidi(event.target.elements.cc.value);
+    const value = clampMidi(event.target.elements.value.value);
+    sendPad([0xb0 | channel, cc, value], `CC ${cc} = ${value} ch ${channel + 1}`);
+  });
+}
+
+function sendPad(bytes, label) {
+  if (!armedToggle.checked) {
+    if (label) monitor.textContent = "Not sent: this device is not armed.";
+    return;
+  }
+  const sent = passThrough(bytes);
+  if (label) monitor.textContent = `Pad · ${label} ${sent ? "→ QLab" : "(not sent: server connection down)"}`;
+}
+
+function clampMidi(value) {
+  return Math.max(0, Math.min(127, Math.round(Number(value) || 0)));
 }
 
 function readStored(key, fallback) {

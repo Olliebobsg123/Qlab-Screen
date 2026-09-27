@@ -190,6 +190,13 @@ curl -X POST -H "X-Control-Token: <token>" -H "Content-Type: application/json" \
   -d '{"bytes":[144,60,100]}' http://<server-ip>:3030/api/control/midi
 ```
 
+#### iPhone and iPad
+
+Every iPhone and iPad browser, including Chrome, uses Safari's engine, which has no Web MIDI. So a web page on the iPhone can't read a plugged-in keyboard.
+
+- **On-screen MIDI pads:** open `http://<server-ip>:3030/midi.html` on the phone. Tap the pads (two octaves, with a channel, velocity and octave picker, plus program change and CC buttons) to send real MIDI to QLab through the same pass-through.
+- **A real keyboard on the iPhone:** use a MIDI app instead of the browser. For example, the free midimittr app can send a USB keyboard's MIDI to a macOS Network MIDI session, which QLab then receives directly.
+
 #### Use mappings on this page
 
 Keys trigger this app's actions (GO, next, panic and so on) over OSC, so nothing needs setting up in QLab.
