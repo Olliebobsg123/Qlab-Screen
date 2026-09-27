@@ -8,7 +8,13 @@ import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
 const pending = new Map();
 const notesCache = new Map();
+const staleNotes = new Set();
 const notesInFlight = new Set();
+// Playhead per cue list; the screens show the one for the list the operator is working in.
+const playheads = new Map();
+let activeListId = "";
+let playheadField = "";
+let refreshQueued = { queued: false, forceCues: false };
 let pollTimer = null;
 let thumpTimer = null;
 let qlabSocket = null;
@@ -47,10 +53,14 @@ export async function connectToQlab({ host, passcode = "", workspaceId = "" }) {
   });
 
   notesCache.clear();
+  staleNotes.clear();
+  playheads.clear();
+  activeListId = "";
+  playheadField = "";
   resetRunningTracking();
   await send(host, `/workspace/${state.workspaceId}/updates`, [1]);
   await refreshAll();
-  await refreshStandby();
+  await refreshAllPlayheads();
   pollTimer = setInterval(refreshAll, 1000);
   thumpTimer = setInterval(() => send(host, `/workspace/${state.workspaceId}/thump`).catch(() => {}), 15000);
 }
@@ -68,7 +78,12 @@ export async function disconnectQlab() {
 }
 
 export async function refreshAll(forceCues = false) {
-  if (!state.connected || state.polling) return;
+  if (!state.connected) return;
+  if (state.polling) {
+    // Don't drop updates that arrive mid-poll: run once more when this poll finishes.
+    refreshQueued = { queued: true, forceCues: refreshQueued.forceCues || forceCues };
+    return;
+  }
   state.polling = true;
   try {
     const shouldLoadCues = forceCues || state.cues.length === 0;
@@ -78,13 +93,13 @@ export async function refreshAll(forceCues = false) {
     ]);
 
     if (cueReply) {
-      if (markCuesIfChanged(flattenCues(asArray(cueReply.data)), forceCues)) notesCache.clear();
+      markCuesIfChanged(flattenCues(asArray(cueReply.data)));
     }
 
     state.running = flattenCues(asArray(runningReply.data));
     const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
     recordRunningCues(state.running, cueMap);
-    await refreshTiming();
+    await Promise.all([refreshTiming(), refreshActivePlayhead()]);
     refreshNotes();
     state.lastError = "";
   } catch (error) {
@@ -92,6 +107,11 @@ export async function refreshAll(forceCues = false) {
   } finally {
     state.polling = false;
     broadcastChanges();
+    if (refreshQueued.queued) {
+      const { forceCues: queuedForce } = refreshQueued;
+      refreshQueued = { queued: false, forceCues: false };
+      refreshAll(queuedForce).catch(() => {});
+    }
   }
 }
 
@@ -148,17 +168,27 @@ function pickWorkspace(workspaces, requestedId) {
   return workspaces[0];
 }
 
+// Waiters are queued per address so two identical queries in flight each get a reply.
 function query(host, address, args = [], timeoutMs = 2500) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      pending.delete(address);
+    const waiter = { resolve, reject, timeout: null };
+    const remove = () => {
+      const queue = pending.get(address);
+      if (!queue) return;
+      const index = queue.indexOf(waiter);
+      if (index !== -1) queue.splice(index, 1);
+      if (!queue.length) pending.delete(address);
+    };
+    waiter.timeout = setTimeout(() => {
+      remove();
       reject(new Error(`Timed out waiting for QLab reply to ${address}`));
     }, timeoutMs);
 
-    pending.set(address, { resolve, reject, timeout });
+    if (!pending.has(address)) pending.set(address, []);
+    pending.get(address).push(waiter);
     send(host, address, args).catch((error) => {
-      clearTimeout(timeout);
-      pending.delete(address);
+      clearTimeout(waiter.timeout);
+      remove();
       reject(error);
     });
   });
@@ -220,9 +250,11 @@ function closeQlabConnection() {
 }
 
 function rejectPending(message) {
-  for (const [address, waiter] of pending.entries()) {
-    clearTimeout(waiter.timeout);
-    waiter.reject(new Error(message));
+  for (const [address, queue] of pending.entries()) {
+    for (const waiter of queue) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(new Error(message));
+    }
     pending.delete(address);
   }
 }
@@ -248,10 +280,11 @@ function handleTcpData(chunk) {
     const reply = normalizeReply(packet);
     if (!reply) continue;
 
-    const waiter = pending.get(reply.address);
+    const queue = pending.get(reply.address);
+    const waiter = queue?.shift();
+    if (queue && !queue.length) pending.delete(reply.address);
     if (waiter) {
       clearTimeout(waiter.timeout);
-      pending.delete(reply.address);
       waiter.resolve(reply);
     }
   }
@@ -260,11 +293,15 @@ function handleTcpData(chunk) {
 function normalizeReply(packet) {
   if (packet.address?.startsWith("/update/")) {
     // QLab 5 sends .../playhead, QLab 4 sends .../playbackPosition; both carry the standby cue ID.
-    const isPlayhead = /\/(playbackPosition|playhead)$/.test(packet.address);
-    if (isPlayhead) {
-      setStandby(String(packet.args[0] || ""));
+    const playheadMatch = packet.address.match(/\/cueList\/([^/]+)\/(playbackPosition|playhead)$/);
+    if (playheadMatch) {
+      // The operator moved this list's playhead, so it's the list to show.
+      activeListId = playheadMatch[1];
+      setListPlayhead(playheadMatch[1], String(packet.args[0] ?? ""));
     }
-    const forceCues = !isPlayhead;
+    const cueMatch = packet.address.match(/\/cue_id\/([^/]+)$/);
+    if (cueMatch) staleNotes.add(cueMatch[1]);
+    const forceCues = !playheadMatch;
     refreshAll(forceCues).catch((error) => {
       state.lastError = error.message;
       broadcastPatch();
@@ -299,30 +336,66 @@ function normalizeReply(packet) {
 
 // --- Standby cue (the playhead) and cue notes ---
 
-async function refreshStandby() {
-  const lists = state.cues.filter((cue) => cue.depth === 0 && cue.uniqueID);
-  for (const list of lists) {
-    const base = `/workspace/${state.workspaceId}/cue_id/${list.uniqueID}`;
-    for (const field of ["playheadId", "playbackPositionId"]) {
-      try {
-        const reply = await query(state.host, `${base}/${field}`, [], 1500);
-        if (reply.status === "ok" && reply.data && reply.data !== "none") {
-          setStandby(String(reply.data));
-          return;
-        }
-      } catch {
-        // Try the next field name / cue list.
-      }
+function cueLists() {
+  return state.cues.filter((cue) => cue.depth === 0 && cue.uniqueID);
+}
+
+// Ask QLab where one cue list's playhead is. QLab 5 calls it playheadId, QLab 4 playbackPositionId.
+async function queryPlayhead(listId) {
+  const base = `/workspace/${state.workspaceId}/cue_id/${listId}`;
+  const fields = playheadField ? [playheadField] : ["playheadId", "playbackPositionId"];
+  for (const field of fields) {
+    try {
+      const reply = await query(state.host, `${base}/${field}`, [], 1500);
+      if (reply.status && reply.status !== "ok") continue;
+      playheadField = field;
+      return { ok: true, cueId: typeof reply.data === "string" ? reply.data : "" };
+    } catch {
+      // Try the other field name.
     }
+  }
+  return { ok: false, cueId: "" };
+}
+
+async function refreshAllPlayheads() {
+  for (const list of cueLists()) {
+    const result = await queryPlayhead(list.uniqueID);
+    if (result.ok) playheads.set(list.uniqueID, normalizeCueId(result.cueId));
+  }
+  if (!activeListId) {
+    // Start on the first list that has a playhead (carts don't).
+    activeListId = cueLists().find((list) => playheads.get(list.uniqueID))?.uniqueID || cueLists()[0]?.uniqueID || "";
+  }
+  applyStandby();
+}
+
+// Polled every refresh so the standby cue corrects itself even if an update message was missed.
+async function refreshActivePlayhead() {
+  if (!activeListId && cueLists().length) activeListId = cueLists()[0].uniqueID;
+  if (!activeListId) return;
+  const result = await queryPlayhead(activeListId);
+  if (result.ok) {
+    playheads.set(activeListId, normalizeCueId(result.cueId));
+    applyStandby();
   }
 }
 
-function setStandby(cueId) {
-  const nextId = cueId && cueId !== "none" ? cueId : "";
+function setListPlayhead(listId, cueId) {
+  playheads.set(listId, normalizeCueId(cueId));
+  applyStandby();
+}
+
+function applyStandby() {
+  const nextId = playheads.get(activeListId) || "";
   if (nextId === state.standbyId) return;
   state.standbyId = nextId;
   refreshNotes();
   broadcastPatch();
+}
+
+function normalizeCueId(cueId) {
+  const value = String(cueId || "");
+  return value && value !== "none" ? value : "";
 }
 
 // Notes are fetched only for the cues screens actually show: standby and running.
@@ -330,11 +403,9 @@ function refreshNotes() {
   const wanted = new Set([state.standbyId, ...state.running.map((cue) => cue.uniqueID)].filter(Boolean));
   const notes = {};
   for (const id of wanted) {
-    if (notesCache.has(id)) {
-      if (notesCache.get(id)) notes[id] = notesCache.get(id);
-    } else {
-      loadNotes(id);
-    }
+    // Keep showing the old notes while a changed cue's notes are re-read.
+    if (notesCache.get(id)) notes[id] = notesCache.get(id);
+    if (!notesCache.has(id) || staleNotes.has(id)) loadNotes(id);
   }
   state.notes = notes;
 }
@@ -343,6 +414,7 @@ async function loadNotes(id) {
   if (notesInFlight.has(id) || !state.connected) return;
   notesInFlight.add(id);
   try {
+    staleNotes.delete(id);
     const reply = await query(state.host, `/workspace/${state.workspaceId}/cue_id/${id}/notes`, [], 1500);
     notesCache.set(id, typeof reply.data === "string" ? reply.data.trim() : "");
   } catch {

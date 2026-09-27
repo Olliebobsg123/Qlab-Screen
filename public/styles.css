@@ -1671,3 +1671,60 @@ a.tool-button {
   font-size: clamp(2rem, 5vw, 3.6rem);
   overflow-wrap: normal;
 }
+
+.mode-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mode-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mode-option:has(input:checked) {
+  border-color: var(--running);
+  background: var(--running-soft);
+}
+
+.mode-option input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+
+.mode-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.mode-option strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.mode-option em {
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.passthrough-panel .help-text {
+  margin: 10px 0 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .mode-row {
+    grid-template-columns: 1fr;
+  }
+}

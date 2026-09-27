@@ -106,6 +106,8 @@ function normalizeControl(saved) {
     // Control is off until an admin turns it on: the app stays read-only by default.
     enabled: Boolean(control.enabled),
     token: String(control.token || "") || createControlToken(),
+    // "virtual" = a virtual MIDI port QLab can listen to; otherwise the name of a MIDI output.
+    midiOutput: String(control.midiOutput || "virtual"),
     midiMappings: Array.isArray(control.midiMappings) ? control.midiMappings.map(normalizeMidiMapping).filter(Boolean) : []
   };
 }

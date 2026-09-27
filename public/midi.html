@@ -43,6 +43,36 @@
           <button id="midiStartButton" type="button">Connect MIDI devices</button>
         </div>
 
+        <h2 class="section-title">What your MIDI does</h2>
+        <div class="mode-row" role="radiogroup" aria-label="MIDI mode">
+          <label class="mode-option">
+            <input type="radio" name="midiMode" value="passthrough" checked>
+            <span>
+              <strong>Pass straight through to QLab</strong>
+              <em>Every note, CC and program change is sent to QLab as MIDI, so the MIDI triggers already set up in your workspace fire.</em>
+            </span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="midiMode" value="mappings">
+            <span>
+              <strong>Use mappings on this page</strong>
+              <em>Keys trigger GO, stop, panic and so on through OSC, without any MIDI setup in QLab.</em>
+            </span>
+          </label>
+        </div>
+
+        <div id="passthroughPanel" class="passthrough-panel">
+          <div class="token-row">
+            <label>
+              <span>QLab receives the MIDI from (MIDI output on the server)</span>
+              <select id="midiOutputSelect"></select>
+            </label>
+            <button id="midiOutputRefresh" type="button" class="secondary">Refresh</button>
+            <span id="midiSocketStatus" class="status-chip" data-state="off">Not connected</span>
+          </div>
+          <p id="midiOutputStatus" class="help-text"></p>
+        </div>
+
         <h2 class="section-title">Inputs on this device</h2>
         <div id="midiInputs" class="midi-inputs empty">No MIDI devices yet. Plug one in and press “Connect MIDI devices”.</div>
 
@@ -50,7 +80,7 @@
         <div id="midiMonitor" class="midi-monitor">Press a key or move a control…</div>
       </section>
 
-      <section class="panel admin-panel">
+      <section id="mappingsPanel" class="panel admin-panel">
         <div class="panel-head bare">
           <h2>Mappings</h2>
           <span>Saved on the server and shared by every MIDI device page</span>

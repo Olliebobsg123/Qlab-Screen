@@ -38,13 +38,15 @@ export function setDisconnected(next = {}) {
     standbyId: "",
     notes: {}
   });
+  cuesSignature = JSON.stringify(state.cues);
   cuesVersion += 1;
   cuesDirty = true;
 }
 
-export function markCuesIfChanged(nextCues, force = false) {
+// Only a real change bumps the version, so screens don't redraw the whole list on every QLab update.
+export function markCuesIfChanged(nextCues) {
   const nextSignature = JSON.stringify(nextCues);
-  if (force || nextSignature !== cuesSignature) {
+  if (nextSignature !== cuesSignature) {
     state.cues = nextCues;
     cuesSignature = nextSignature;
     cuesVersion += 1;

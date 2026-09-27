@@ -49,5 +49,8 @@
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
     "nodemon": "^3.1.14"
+  },
+  "optionalDependencies": {
+    "@julusian/midi": "^3.8.1"
   }
 }

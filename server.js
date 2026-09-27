@@ -5,10 +5,13 @@ import { connectToQlab } from "./src/qlab.js";
 import { getSettings } from "./src/settings.js";
 import { state } from "./src/state.js";
 import { broadcastSnapshot } from "./src/events.js";
+import { attachMidiSocket, initMidiOutput } from "./src/midi-out.js";
 import { loadTlsCredentials } from "./src/tls.js";
 
 export function startServer() {
   const server = createHttpServer();
+  attachMidiSocket(server);
+  initMidiOutput();
 
   server.listen(HTTP_PORT, () => {
     console.log(`QLab Screen is running at http://localhost:${HTTP_PORT}`);
@@ -33,6 +36,7 @@ async function startHttpsServer() {
   try {
     const credentials = await loadTlsCredentials();
     const httpsServer = createHttpsServer(credentials);
+    attachMidiSocket(httpsServer);
     await new Promise((resolve, reject) => {
       httpsServer.once("error", reject);
       httpsServer.listen(HTTPS_PORT, resolve);

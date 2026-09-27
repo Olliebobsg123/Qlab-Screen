@@ -14,7 +14,15 @@ const actionSelect = $("#mappingAction");
 const learnButton = $("#learnButton");
 const mappingMessage = $("#mappingMessage");
 const mappingList = $("#mappingList");
+const passthroughPanel = $("#passthroughPanel");
+const mappingsPanel = $("#mappingsPanel");
+const outputSelect = $("#midiOutputSelect");
+const outputStatus = $("#midiOutputStatus");
+const socketStatus = $("#midiSocketStatus");
 const ARMED_KEY = "qlab-midi-armed";
+const MODE_KEY = "qlab-midi-mode";
+// Clock and active sensing are sent constantly by many keyboards; QLab triggers never need them.
+const IGNORED_STATUS = new Set([0xf8, 0xfe]);
 const DISABLED_INPUTS_KEY = "qlab-midi-disabled-inputs";
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const STARTER_LAYOUT = [
@@ -32,9 +40,23 @@ let actions = [];
 let mappings = [];
 let learning = false;
 let disabledInputs = new Set(readStored(DISABLED_INPUTS_KEY, []));
+let mode = readStored(MODE_KEY, "passthrough");
+let controlToken = "";
+let socket = null;
+let socketRetry = null;
 const ccValues = new Map();
 
 armedToggle.checked = readStored(ARMED_KEY, true);
+for (const radio of document.querySelectorAll("[name=midiMode]")) {
+  radio.checked = radio.value === mode;
+  radio.addEventListener("change", () => {
+    mode = radio.value;
+    writeStored(MODE_KEY, mode);
+    applyMode();
+  });
+}
+outputSelect.addEventListener("change", () => saveOutput(outputSelect.value));
+$("#midiOutputRefresh").addEventListener("click", loadOutputs);
 armedToggle.addEventListener("change", () => writeStored(ARMED_KEY, armedToggle.checked));
 startButton.addEventListener("click", startMidi);
 learnButton.addEventListener("click", () => {
@@ -56,11 +78,88 @@ subscribeState("midi", (state, online) => {
 });
 
 await loadSettings();
+applyMode();
+loadOutputs();
+connectSocket();
 checkEnvironment();
+
+function applyMode() {
+  passthroughPanel.hidden = mode !== "passthrough";
+  mappingsPanel.hidden = mode !== "mappings";
+}
+
+// --- Pass-through: raw MIDI over a WebSocket to the server's MIDI output ---
+
+function connectSocket() {
+  clearTimeout(socketRetry);
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  socket = new WebSocket(`${protocol}//${location.host}/midi-ws?token=${encodeURIComponent(controlToken)}`);
+  setSocketStatus("pending", "Connecting…");
+  socket.onopen = () => setSocketStatus("on", "Live to server");
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === "error") monitor.textContent = `Not sent: ${message.error}`;
+    if (message.type === "status" && !message.open) setSocketStatus("pending", "Server has no MIDI output");
+  };
+  socket.onclose = () => {
+    setSocketStatus("off", "Reconnecting…");
+    socketRetry = setTimeout(connectSocket, 2000);
+  };
+}
+
+function setSocketStatus(state, text) {
+  socketStatus.dataset.state = state;
+  socketStatus.textContent = text;
+}
+
+function passThrough(bytes) {
+  if (socket?.readyState !== WebSocket.OPEN) return false;
+  socket.send(JSON.stringify({ m: Array.from(bytes) }));
+  return true;
+}
+
+async function loadOutputs() {
+  const status = await fetch("/api/admin/midi-output", { cache: "no-store" }).then((response) => response.json());
+  renderOutputs(status);
+}
+
+async function saveOutput(port) {
+  const response = await fetch("/api/admin/midi-output", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ port })
+  });
+  renderOutputs(await response.json());
+}
+
+function renderOutputs(status) {
+  const options = [];
+  if (status.virtualSupported) {
+    options.push(["virtual", `Virtual port “${status.virtualName}” (QLab on the same Mac as this server)`]);
+  }
+  for (const port of status.ports || []) options.push([port, port]);
+  if (status.selected && !options.some(([value]) => value === status.selected)) {
+    options.push([status.selected, `${status.selected} (not connected)`]);
+  }
+  outputSelect.innerHTML = options
+    .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === status.selected ? "selected" : ""}>${escapeHtml(label)}</option>`)
+    .join("");
+
+  if (!status.available) {
+    outputStatus.textContent = status.error || "MIDI output isn't available on the server.";
+  } else if (status.open) {
+    outputStatus.textContent = status.selected === "virtual"
+      ? `Sending to “${status.openName}”. In QLab, open Workspace Settings → MIDI and make sure the “${status.virtualName}” device is enabled for MIDI triggers.`
+      : `Sending to “${status.openName}”.`;
+  } else {
+    outputStatus.textContent = status.error || "No MIDI output open.";
+  }
+}
 
 async function loadSettings() {
   const response = await fetch("/api/admin/control", { cache: "no-store" });
   const data = await response.json();
+  controlToken = data.token || "";
   actions = data.actions || [];
   mappings = data.midiMappings || [];
   actionSelect.innerHTML = actions
@@ -131,6 +230,17 @@ function renderInputs() {
 }
 
 function handleMidi(input, event) {
+  const status = event.data[0];
+  if (IGNORED_STATUS.has(status)) return;
+
+  if (mode === "passthrough" && !learning) {
+    if (disabledInputs.has(input.id) || !armedToggle.checked) return;
+    if (status === 0xf0) return;
+    const sent = passThrough(event.data);
+    monitor.textContent = `${input.name || "MIDI"} · ${describeRaw(event.data)} ${sent ? "→ QLab" : "(not sent: server connection down)"}`;
+    return;
+  }
+
   const message = parseMidi(event.data);
   if (!message) return;
   monitor.textContent = `${input.name || "MIDI"} · ${describe(message)}${message.trigger ? "" : " (release)"}`;
@@ -197,6 +307,12 @@ function describe(message) {
   if (message.type === "note") return `Note ${noteName(message.number)} (${message.number}) ${channel}`;
   if (message.type === "cc") return `CC ${message.number} ${channel}`;
   return `Program ${message.number} ${channel}`;
+}
+
+function describeRaw(data) {
+  const message = parseMidi(data);
+  if (message) return describe(message);
+  return Array.from(data).map((byte) => byte.toString(16).padStart(2, "0")).join(" ");
 }
 
 function noteName(number) {

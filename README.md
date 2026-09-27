@@ -165,23 +165,38 @@ Plug a MIDI keyboard or controller into any laptop or Android device on the same
 1. On that device, open `https://<server-ip>:3443/midi.html` in Chrome, Edge, Opera or Firefox. Safari and iPhone/iPad don't support Web MIDI.
 2. The first time, the browser warns about the self-signed certificate. Choose **Advanced → Proceed**, then log in with the admin account.
 3. Press **Connect MIDI devices** and allow MIDI access.
-4. Press **Add starter keyboard layout**, or use **Learn from MIDI**: press a key, then pick an action.
+4. Choose what the MIDI does. There are two modes, described below.
 
-Starter layout:
-
-| Key | Action |
-| --- | --- |
-| C4 (60) | GO |
-| D4 (62) | Playhead next |
-| B3 (59) | Playhead previous |
-| E4 (64) | Pause all |
-| F4 (65) | Resume all |
-| G4 (67) | Stop all |
-| C2 (36) | Panic |
-
-Mappings can use notes, CCs or program changes, on one channel or any channel. A CC fires once each time its value crosses 64, so a sustain pedal works as a GO pedal. Mappings are saved on the server, so every MIDI page shares them. Each device has its own **Armed** switch. Keep the MIDI tab open while the show runs.
+Each device has its own **Armed** switch. Keep the MIDI tab open while the show runs.
 
 Browsers only allow Web MIDI on secure (HTTPS) pages, which is why the server also runs HTTPS on port 3443.
+
+#### Pass straight through to QLab (default)
+
+Every note, CC, program change, pitch bend and transport message from the keyboard is sent to QLab as real MIDI, so the MIDI triggers already set up on your cues fire. MIDI clock, active sensing and SysEx are not passed through.
+
+The browser sends the messages to the server over a live connection. The server plays them out of a MIDI port:
+
+- **The server runs on the QLab Mac (recommended):** the server creates a virtual MIDI device called **QLab Connect**. In QLab, check it is enabled as a MIDI input in Workspace Settings → MIDI. You may need to restart QLab the first time so it sees the new device.
+- **The server runs on another Mac:** set up a macOS Network MIDI session between the two Macs (Audio MIDI Setup → Window → Show MIDI Studio → Network). Pick that session in the MIDI page's output list.
+- **Windows:** Windows can't create virtual MIDI ports. Install loopMIDI, create a port, and pick it in the output list.
+
+The output list is shared by everyone, because it is set on the server. Pass-through needs **QLab control** turned on in Admin.
+
+Scripts can send raw MIDI too:
+
+```bash
+curl -X POST -H "X-Control-Token: <token>" -H "Content-Type: application/json" \
+  -d '{"bytes":[144,60,100]}' http://<server-ip>:3030/api/control/midi
+```
+
+#### Use mappings on this page
+
+Keys trigger this app's actions (GO, next, panic and so on) over OSC, so nothing needs setting up in QLab.
+
+- Press **Add starter keyboard layout**, or use **Learn from MIDI**: press a key, then pick an action.
+- Starter layout: C4 (60) = GO, D4 (62) = next, B3 (59) = previous, E4 (64) = pause all, F4 (65) = resume all, G4 (67) = stop all, C2 (36) = panic.
+- Mappings are saved on the server and shared by every MIDI page.
 
 ### Stream Deck, Companion and scripts
 
@@ -320,6 +335,7 @@ src/show.js               Show clock, intervals, GO log and CSV report
 src/paging.js             Backstage paging message
 src/network.js            LAN addresses and QR codes
 src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
+src/midi-out.js           MIDI pass-through: WebSocket from the MIDI page to a MIDI output port
 public/shared.js          Browser helpers: departments, standby, show clock, paging overlay
 public/                   Browser UI
 deploy/qlabconnect.service systemd unit

@@ -6,6 +6,7 @@ import { hasControlAuth, listControlActions, runControlAction } from "./control.
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
+import { midiOutputStatus, selectMidiOutput, sendMidiBytes } from "./midi-out.js";
 import { networkUrls, qrSvg } from "./network.js";
 import { connectToQlab, disconnectQlab } from "./qlab.js";
 import {
@@ -109,6 +110,15 @@ async function routeRequest(request, response) {
 
   if (url.pathname === "/api/admin/control" && request.method === "POST") {
     return handleSaveControl(request, response);
+  }
+
+  if (url.pathname === "/api/admin/midi-output" && request.method === "GET") {
+    return sendJson(response, midiOutputStatus());
+  }
+
+  if (url.pathname === "/api/admin/midi-output" && request.method === "POST") {
+    const body = await readBody(request);
+    return sendJson(response, await selectMidiOutput(body.port));
   }
 
   if (url.pathname === "/api/admin/network" && request.method === "GET") {
@@ -267,6 +277,13 @@ async function handleControl(request, response, action) {
 
   if (request.method !== "POST") {
     return sendJson(response, { error: "Use POST for control actions." }, 405);
+  }
+
+  // Raw MIDI pass-through for scripts; the MIDI page uses the /midi-ws socket instead.
+  if (action === "midi") {
+    const body = await readBody(request);
+    sendMidiBytes(body.bytes);
+    return sendJson(response, { ok: true });
   }
 
   const body = await readBody(request).catch(() => ({}));
