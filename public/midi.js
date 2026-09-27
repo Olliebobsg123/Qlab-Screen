@@ -65,6 +65,19 @@ for (const radio of document.querySelectorAll("[name=midiMode]")) {
   });
 }
 outputSelect.addEventListener("change", () => saveOutput(outputSelect.value));
+$("#networkDiscovered").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-network-action]");
+  if (!button) return;
+  button.disabled = true;
+  networkAction(button.dataset.networkAction, button.dataset.name);
+});
+$("#networkManualForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const address = event.target.elements.address.value.trim();
+  if (!address) return;
+  networkAction("connect", address.includes(":") ? address : `${address}:5004`);
+  event.target.elements.address.value = "";
+});
 $("#midiOutputRefresh").addEventListener("click", loadOutputs);
 armedToggle.addEventListener("change", () => writeStored(ARMED_KEY, armedToggle.checked));
 startButton.addEventListener("click", startMidi);
@@ -174,8 +187,39 @@ function renderNetwork(network, outputOpen) {
 
   const host = location.hostname;
   $("#networkManual").textContent = network.running
-    ? `If the app doesn't list QLab Connect, add it by hand: address ${host}, port ${network.port}.`
+    ? `You can also connect from the app instead: pick “QLab Connect”, or add it by hand as ${host}, port ${network.port}.`
     : "";
+
+  const devices = network.discovered || [];
+  const stateLabels = { idle: "", connecting: "Connecting…", connected: "Connected", failed: "Failed", disconnected: "Reconnecting…" };
+  $("#networkDiscovered").innerHTML = devices.length
+    ? devices.map((device) => {
+      const connected = device.state === "connected" || device.state === "connecting" || device.auto;
+      return `<div class="participant discovered" data-state="${escapeHtml(device.state)}">
+        <span class="participant-name"><strong>${escapeHtml(device.name)}</strong>
+          <em>${escapeHtml(stateLabels[device.state] || "")}${device.visible ? "" : " (not visible right now)"}${device.error ? ` · ${escapeHtml(device.error)}` : ""}</em></span>
+        <button type="button" class="secondary" data-network-action="${connected ? "disconnect" : "connect"}" data-name="${escapeHtml(device.name)}">
+          ${connected ? "Disconnect" : "Connect"}
+        </button>
+      </div>`;
+    }).join("")
+    : (network.discoverySupported
+      ? "No other network MIDI sessions found yet. Open midimittr on the iPhone and turn its network session on."
+      : "Automatic discovery needs the server to run on a Mac. Connect by address below.");
+}
+
+async function networkAction(action, name) {
+  const response = await fetch("/api/admin/network-midi", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, name })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    $("#networkLast").textContent = data.error || "Could not change the connection.";
+    return;
+  }
+  loadOutputs();
 }
 
 function renderOutputs(status) {

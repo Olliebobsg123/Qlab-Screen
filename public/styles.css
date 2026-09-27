@@ -1863,3 +1863,40 @@ a.tool-button {
 .participant span {
   color: var(--muted);
 }
+
+.subhead {
+  margin: 18px 0 8px;
+  font-size: 0.9rem;
+}
+
+.participant.discovered {
+  align-items: center;
+  border-color: var(--line);
+  background: transparent;
+}
+
+.participant.discovered[data-state="connected"] {
+  border-color: var(--running);
+  background: var(--running-soft);
+}
+
+.participant.discovered[data-state="failed"] {
+  border-color: var(--danger);
+}
+
+.participant-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.participant-name em {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.manual-connect {
+  margin-top: 10px;
+}

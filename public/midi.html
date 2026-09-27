@@ -91,10 +91,22 @@
         </p>
         <ol class="steps">
           <li>Plug the keyboard into the iPhone. On older iPhones use Apple's Lightning to USB 3 Camera Adapter with its charging port powered.</li>
-          <li>Install a free network MIDI app from the App Store, such as <strong>midimittr</strong>.</li>
-          <li>Open the app, allow local network access, and connect to <strong>QLab Connect</strong> (choose <strong>RTP</strong>, not Network MIDI 2.0).</li>
-          <li>Play a key. The phone appears below and the notes go to QLab.</li>
+          <li>Install a free network MIDI app from the App Store, such as <strong>midimittr</strong>, open it, allow local network access, and turn its network session on (<strong>RTP</strong>, not Network MIDI 2.0).</li>
+          <li>Your phone appears under <strong>Devices on the network</strong> below. Press <strong>Connect</strong>. It reconnects by itself after that.</li>
+          <li>Play a key. The notes go to QLab.</li>
         </ol>
+
+        <h3 class="subhead">Devices on the network</h3>
+        <div id="networkDiscovered" class="network-participants">Looking for devices…</div>
+        <form id="networkManualForm" class="pad-send manual-connect">
+          <label>
+            <span>Or connect by address (e.g. 192.168.1.20:5004)</span>
+            <input name="address" autocomplete="off" inputmode="url" placeholder="iPhone IP address:port">
+          </label>
+          <button type="submit" class="secondary">Connect</button>
+        </form>
+
+        <h3 class="subhead">Connected</h3>
         <div id="networkParticipants" class="network-participants">No devices connected yet.</div>
         <p id="networkLast" class="help-text"></p>
         <p id="networkManual" class="help-text"></p>

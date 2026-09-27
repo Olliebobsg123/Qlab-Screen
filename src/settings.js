@@ -108,6 +108,8 @@ function normalizeControl(saved) {
     token: String(control.token || "") || createControlToken(),
     // "virtual" = a virtual MIDI port QLab can listen to; otherwise the name of a MIDI output.
     midiOutput: String(control.midiOutput || "virtual"),
+    // Network MIDI sessions (e.g. an iPhone running midimittr) to connect to automatically.
+    networkMidiAuto: Array.isArray(control.networkMidiAuto) ? control.networkMidiAuto.map(String).slice(0, 20) : [],
     midiMappings: Array.isArray(control.midiMappings) ? control.midiMappings.map(normalizeMidiMapping).filter(Boolean) : []
   };
 }

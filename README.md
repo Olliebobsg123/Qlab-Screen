@@ -197,10 +197,11 @@ Every iPhone and iPad browser, including Chrome, uses Safari's engine, which has
 **A real keyboard: the built-in network MIDI session.** The server runs its own network MIDI session (RTP-MIDI, also called AppleMIDI) called **QLab Connect** and announces it on the network. Anything played into it goes to the same MIDI output as the pass-through, so QLab's MIDI triggers fire. Nothing needs setting up in Audio MIDI Setup.
 
 1. Plug the keyboard into the iPhone. On a Lightning iPhone, use the Lightning to USB 3 Camera Adapter with its charging port powered.
-2. Install a free network MIDI app such as midimittr.
-3. In the app, connect to **QLab Connect** using **RTP**, not Network MIDI 2.0.
+2. Install a free network MIDI app such as midimittr. Open it and turn its network session on, using **RTP**, not Network MIDI 2.0.
+3. On the MIDI page, find the phone under **Devices on the network** and press **Connect**. The server connects out to the phone (like Audio MIDI Setup's Connect button), which avoids the Mac firewall blocking incoming connections. It remembers the device and reconnects by itself.
+4. If the phone isn't listed, use **Connect by address** with the phone's IP address and port (usually 5004). You can also connect from the app to **QLab Connect** instead.
 
-The MIDI page shows which devices are connected and the last message received. The session uses UDP 5004/5005. If those ports are taken (for example by a session you made in Audio MIDI Setup), the server moves to the next free pair and prints it at startup. Set `RTP_MIDI_PORT=0` to turn the session off.
+The MIDI page shows which devices are connected and the last message received. Finding devices by name uses Bonjour and needs the server to run on a Mac. Connecting by address works anywhere. The session uses UDP 5004/5005. If those ports are taken (for example by a session you made in Audio MIDI Setup), the server moves to the next free pair and prints it at startup. Set `RTP_MIDI_PORT=0` to turn the session off.
 
 **Without a keyboard: on-screen MIDI pads.** Open `http://<server-ip>:3030/midi.html` on the phone. Tap the pads (two octaves, with a channel, velocity and octave picker, plus program change and CC buttons) to send MIDI through the same pass-through.
 
