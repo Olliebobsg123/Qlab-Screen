@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QLab Control</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="control-body server-offline">
+    <main class="shell control-shell">
+      <section class="connection-panel" aria-label="Control">
+        <div class="hero-block">
+          <p class="eyebrow">Stage manager control</p>
+          <h1 id="controlWorkspace">Waiting for QLab</h1>
+        </div>
+        <nav class="page-links" aria-label="Pages">
+          <a href="/">Monitor</a>
+          <a href="/dashboard.html">TV Dashboard</a>
+          <a href="/midi.html">MIDI</a>
+          <a href="/report.html">Show Report</a>
+          <a href="/admin.html">Admin</a>
+        </nav>
+      </section>
+
+      <p id="controlDisabledNotice" class="notice" hidden>
+        QLab control is turned off. Paging and the show clock still work.
+        <a href="/admin.html">Turn on control in Admin</a> and use a QLab passcode with control access.
+      </p>
+
+      <section class="control-grid">
+        <div class="panel control-panel">
+          <div class="panel-head">
+            <h2>Cue control</h2>
+            <span id="controlStatus">Disconnected</span>
+          </div>
+
+          <div class="control-standby">
+            <span class="label">Standby</span>
+            <div class="standby-line">
+              <strong id="controlStandbyNumber" class="cue-number">-</strong>
+              <strong id="controlStandbyName">-</strong>
+            </div>
+            <p id="controlStandbyNotes" class="notes-text" hidden></p>
+          </div>
+
+          <button id="goButton" type="button" class="go-button" data-action="go" data-qlab>GO</button>
+
+          <div class="control-row">
+            <button type="button" class="secondary" data-action="previous" data-qlab>◀ Previous</button>
+            <button type="button" class="secondary" data-action="next" data-qlab>Next ▶</button>
+          </div>
+          <div class="control-row">
+            <button type="button" class="secondary" data-action="pause" data-qlab>Pause all</button>
+            <button type="button" class="secondary" data-action="resume" data-qlab>Resume all</button>
+            <button type="button" class="secondary" data-action="stop" data-qlab>Stop all</button>
+          </div>
+          <div class="control-row">
+            <button id="panicButton" type="button" class="panic-button" data-qlab>
+              <span class="hold-fill" aria-hidden="true"></span>
+              <span class="hold-label">Hold for PANIC (fade all)</span>
+            </button>
+            <button id="hardStopButton" type="button" class="danger-outline" data-qlab>Hard stop</button>
+          </div>
+
+          <form id="cueForm" class="cue-form">
+            <label>
+              <span>Cue number</span>
+              <input name="cue" autocomplete="off" placeholder="e.g. 42" required>
+            </label>
+            <button type="submit" class="secondary" data-cue-action="startCue" data-qlab>Start cue</button>
+            <button type="submit" class="secondary" data-cue-action="standby" data-qlab>Set standby</button>
+          </form>
+
+          <label class="toggle-row">
+            <input id="keyboardToggle" type="checkbox">
+            <span>Keyboard shortcuts on this device (Space = GO, Esc = Panic)</span>
+          </label>
+
+          <div class="control-running">
+            <span class="label">Running</span>
+            <div id="controlRunning" class="control-running-list">Nothing running.</div>
+          </div>
+        </div>
+
+        <div class="control-side">
+          <div class="panel control-panel">
+            <div class="panel-head">
+              <h2>Show clock</h2>
+              <span id="controlShowClock" class="show-clock" data-state="idle">Not started</span>
+            </div>
+            <div class="control-row">
+              <button type="button" class="secondary" data-action="showStart">Start show</button>
+              <button type="button" class="secondary" data-action="showEnd">End show</button>
+            </div>
+            <div class="control-row interval-row">
+              <label>
+                <span>Interval minutes</span>
+                <input id="intervalMinutes" type="number" min="0" max="180" value="20">
+              </label>
+              <button id="intervalStartButton" type="button" class="secondary">Start interval</button>
+              <button type="button" class="secondary" data-action="intervalEnd">End interval</button>
+            </div>
+          </div>
+
+          <div class="panel control-panel">
+            <div class="panel-head">
+              <h2>Backstage paging</h2>
+              <span id="pageStatus">No active call</span>
+            </div>
+            <div class="page-presets">
+              <button type="button" class="secondary" data-page="Beginners to the stage please">Beginners</button>
+              <button type="button" class="secondary" data-page="Places please">Places</button>
+              <button type="button" class="secondary" data-page="5 minutes please">5 minutes</button>
+              <button type="button" class="secondary" data-page="House is open">House open</button>
+              <button type="button" class="secondary" data-page="Interval: 5 minutes remaining">Interval 5 min</button>
+              <button type="button" class="secondary" data-page="Hold please" data-level="urgent">HOLD</button>
+            </div>
+            <form id="pageForm" class="page-form">
+              <label class="wide">
+                <span>Message</span>
+                <input name="text" maxlength="200" autocomplete="off" placeholder="Custom message">
+              </label>
+              <label>
+                <span>Screens</span>
+                <select name="target">
+                  <option value="all">All screens</option>
+                  <option value="dashboard">TV dashboards</option>
+                  <option value="monitor">Monitors</option>
+                  <option value="sound">Sound department</option>
+                  <option value="lighting">Lighting department</option>
+                  <option value="video">Video department</option>
+                  <option value="stage">Stage department</option>
+                </select>
+              </label>
+              <label>
+                <span>Style</span>
+                <select name="level">
+                  <option value="call">Call</option>
+                  <option value="info">Info</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </label>
+              <label>
+                <span>Auto-clear after (seconds, 0 = never)</span>
+                <input name="durationSec" type="number" min="0" max="3600" value="60">
+              </label>
+              <div class="form-actions">
+                <button type="submit">Send page</button>
+                <button type="button" class="secondary" data-action="clearPage">Clear</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+      <p id="controlMessage" class="toast" aria-live="polite"></p>
+    </main>
+
+    <script src="/control.js" type="module"></script>
+  </body>
+</html>

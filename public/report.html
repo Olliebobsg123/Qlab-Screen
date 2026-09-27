@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QLab Show Report</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell admin-shell">
+      <section class="connection-panel" aria-label="Show report">
+        <div class="hero-block">
+          <p class="eyebrow">Show report</p>
+          <h1 id="reportTitle">GO log</h1>
+        </div>
+        <nav class="page-links" aria-label="Pages">
+          <a href="/control.html">Control</a>
+          <a href="/">Monitor</a>
+          <a href="/admin.html">Admin</a>
+        </nav>
+      </section>
+
+      <section class="status-strip report-summary">
+        <div><span class="label">Started</span><strong id="reportStarted">-</strong></div>
+        <div><span class="label">Running time</span><strong id="reportRunning">-</strong></div>
+        <div><span class="label">Intervals</span><strong id="reportIntervals">-</strong></div>
+        <div><span class="label">Cues fired</span><strong id="reportGoCount">0</strong></div>
+        <div><span class="label">Stage time</span><strong id="reportStageTime">-</strong></div>
+      </section>
+
+      <section class="panel admin-panel">
+        <div class="form-actions">
+          <a class="tool-button" href="/api/admin/report.csv">Download CSV</a>
+          <button id="refreshButton" type="button" class="secondary">Refresh</button>
+          <button id="resetButton" type="button" class="secondary">Reset for next show</button>
+        </div>
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr><th>Time</th><th>Show clock</th><th>Event</th><th>Cue</th><th>Name</th><th>Type</th></tr>
+            </thead>
+            <tbody id="reportRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="/report.js" type="module"></script>
+  </body>
+</html>

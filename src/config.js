@@ -10,6 +10,10 @@ export const APP_VERSION = readAppVersion();
 const SAVED_SERVER_CONFIG = readSavedServerConfig();
 
 export const HTTP_PORT = readNumber(process.env.PORT, SAVED_SERVER_CONFIG.httpPort, 3030);
+// HTTPS is needed for Web MIDI and audio input on devices other than the server. Set to 0 to disable.
+export const HTTPS_PORT = readOptionalPort(process.env.HTTPS_PORT, SAVED_SERVER_CONFIG.httpsPort, 3443);
+export const TLS_CERT_PATH = process.env.TLS_CERT_PATH || "";
+export const TLS_KEY_PATH = process.env.TLS_KEY_PATH || "";
 export const QLAB_TCP_PORT = readNumber(process.env.QLAB_TCP_PORT, SAVED_SERVER_CONFIG.qlabTcpPort, 53000);
 export const ADMIN_USER = process.env.ADMIN_USER || SAVED_SERVER_CONFIG.adminUser || "admin";
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || SAVED_SERVER_CONFIG.adminPassword || "thomas";
@@ -45,6 +49,15 @@ function readNumber(...values) {
   for (const value of values) {
     const number = Number(value);
     if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
+}
+
+function readOptionalPort(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const number = Number(value);
+    if (Number.isInteger(number) && number >= 0) return number;
   }
   return 0;
 }

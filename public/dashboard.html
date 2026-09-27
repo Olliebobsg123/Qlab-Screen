@@ -20,10 +20,13 @@
           <button id="tvFullscreenButton" type="button" class="tool-button">Fullscreen</button>
           <button id="tvWakeLockButton" type="button" class="tool-button">Keep Awake</button>
         </div>
-        <span id="tvClock">--:--</span>
+        <span class="tv-clocks">
+          <span id="tvShowClock" class="show-clock" data-state="idle">Show clock</span>
+          <span id="tvClock">--:--</span>
+        </span>
       </section>
 
-      <section class="tv-current" aria-live="polite">
+      <section id="tvCurrent" class="tv-current" aria-live="polite">
         <p class="eyebrow">Current cue group</p>
         <h1 id="tvGroup">Waiting for QLab</h1>
         <div class="tv-cue-line">
@@ -37,11 +40,21 @@
           <span id="tvElapsed">--:--.- elapsed</span>
           <span id="tvRemaining">--:--.- remaining</span>
         </div>
+        <p id="tvCurrentNotes" class="notes-text tv-notes" hidden></p>
+        <div id="tvStandby" class="tv-standby">
+          <span class="eyebrow">Standby / next GO</span>
+          <div class="tv-standby-line">
+            <span id="tvStandbyNumber">-</span>
+            <strong id="tvStandbyName">-</strong>
+          </div>
+          <p id="tvStandbyNotes" class="notes-text tv-notes" hidden></p>
+        </div>
       </section>
 
       <section class="tv-next">
         <p class="eyebrow">Running cues</p>
         <div id="tvRunningList">Nothing running.</div>
+        <div id="tvMeters" class="tv-meters" hidden aria-label="Audio levels"></div>
       </section>
     </main>
 

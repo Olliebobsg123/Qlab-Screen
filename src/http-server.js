@@ -1,77 +1,155 @@
 import http from "node:http";
+import https from "node:https";
 import { hasAdminAuth, isAdminPath, requestAdminAuth } from "./auth.js";
-import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, QLAB_TCP_PORT, SETTINGS_PATH } from "./config.js";
-import { broadcastHeartbeat, handleEvents } from "./events.js";
+import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, HTTPS_PORT, QLAB_TCP_PORT, SETTINGS_PATH } from "./config.js";
+import { hasControlAuth, listControlActions, runControlAction } from "./control.js";
+import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
+import { networkUrls, qrSvg } from "./network.js";
 import { connectToQlab, disconnectQlab } from "./qlab.js";
-import { getSettings, publicServerSettings, publicSettings, updateServerSettings, updateSettings } from "./settings.js";
-import { publicStatePatch, state } from "./state.js";
+import {
+  createControlToken,
+  getSettings,
+  normalizeMidiMapping,
+  publicControlSettings,
+  publicServerSettings,
+  publicSettings,
+  updateControlSettings,
+  updateServerSettings,
+  updateSettings
+} from "./settings.js";
+import { getShowReport, showReportCsv } from "./show.js";
+import { publicStatePatch, publicStateSnapshot, state } from "./state.js";
 import { listViewers, updateViewerPresence } from "./viewers.js";
 
 export function createHttpServer() {
-  return http.createServer(async (request, response) => {
-    try {
-      const url = new URL(request.url, `http://${request.headers.host}`);
+  return http.createServer(handleRequest);
+}
 
-      if (isMacOwnerPath(url.pathname) && !hasMacOwnerAccess(request, url)) {
-        return denyMacOwnerAccess(response);
-      }
+export function createHttpsServer(credentials) {
+  return https.createServer({ cert: credentials.cert, key: credentials.key }, handleRequest);
+}
 
-      if (isAdminPath(url.pathname) && !hasAdminAuth(request)) {
-        return requestAdminAuth(response);
-      }
-
-      if (url.pathname === "/api/connect" && request.method === "POST") {
-        return handleConnect(request, response);
-      }
-
-      if (url.pathname === "/api/disconnect" && request.method === "POST") {
-        return handleDisconnect(response);
-      }
-
-      if (url.pathname === "/api/saved-settings" && request.method === "GET") {
-        return sendJson(response, publicSettings());
-      }
-
-      if (url.pathname === "/api/admin/settings" && request.method === "POST") {
-        return handleSaveSettings(request, response);
-      }
-
-      if (url.pathname === "/api/mac/settings" && request.method === "GET") {
-        return handleMacSettings(response);
-      }
-
-      if (url.pathname === "/api/mac/settings" && request.method === "POST") {
-        return handleSaveMacSettings(request, response);
-      }
-
-      if (url.pathname === "/api/admin/viewers" && request.method === "GET") {
-        return sendJson(response, { viewers: listViewers() });
-      }
-
-      if (url.pathname === "/api/presence" && request.method === "POST") {
-        return handlePresence(request, response);
-      }
-
-      if (url.pathname === "/api/state") {
-        return sendJson(response, state);
-      }
-
-      if (url.pathname === "/api/status") {
-        return sendJson(response, publicStatePatch());
-      }
-
-      if (url.pathname === "/events") {
-        return handleEvents(request, response);
-      }
-
-      return serveStatic(url.pathname, response);
-    } catch (error) {
-      console.error(error);
-      sendJson(response, { error: error.message }, error.status || 500);
+async function handleRequest(request, response) {
+  try {
+    // Awaited so errors from async route handlers are caught here instead of crashing the process.
+    await routeRequest(request, response);
+  } catch (error) {
+    if (!error.status) console.error(error);
+    if (response.headersSent) {
+      response.end();
+      return;
     }
-  });
+    sendJson(response, { error: error.message }, error.status || 500);
+  }
+}
+
+async function routeRequest(request, response) {
+  const url = new URL(request.url, `http://${request.headers.host}`);
+
+  if (isMacOwnerPath(url.pathname) && !hasMacOwnerAccess(request, url)) {
+    return denyMacOwnerAccess(response);
+  }
+
+  if (isAdminPath(url.pathname) && !hasAdminAuth(request)) {
+    return requestAdminAuth(response);
+  }
+
+  // Connecting and disconnecting change what every screen (and control surface) talks to.
+  if ((url.pathname === "/api/connect" || url.pathname === "/api/disconnect") &&
+    !hasAdminAuth(request) && !hasMacOwnerAccess(request, url)) {
+    return requestAdminAuth(response);
+  }
+
+  if (url.pathname === "/api/connect" && request.method === "POST") {
+    return handleConnect(request, response);
+  }
+
+  if (url.pathname === "/api/disconnect" && request.method === "POST") {
+    return handleDisconnect(response);
+  }
+
+  if (url.pathname === "/api/saved-settings" && request.method === "GET") {
+    return sendJson(response, publicSettings());
+  }
+
+  if (url.pathname === "/api/admin/settings" && request.method === "POST") {
+    return handleSaveSettings(request, response);
+  }
+
+  if (url.pathname === "/api/mac/settings" && request.method === "GET") {
+    return handleMacSettings(response);
+  }
+
+  if (url.pathname === "/api/mac/settings" && request.method === "POST") {
+    return handleSaveMacSettings(request, response);
+  }
+
+  if (url.pathname === "/api/admin/viewers" && request.method === "GET") {
+    return sendJson(response, { viewers: listViewers() });
+  }
+
+  if (url.pathname === "/api/presence" && request.method === "POST") {
+    return handlePresence(request, response);
+  }
+
+  if (url.pathname === "/api/state") {
+    return sendJson(response, publicStateSnapshot());
+  }
+
+  if (url.pathname.startsWith("/api/control/")) {
+    if (!hasControlAuth(request, url)) return requestAdminAuth(response);
+    return handleControl(request, response, url.pathname.slice("/api/control/".length));
+  }
+
+  if (url.pathname === "/api/admin/control" && request.method === "GET") {
+    return sendJson(response, { ...publicControlSettings(), actions: listControlActions() });
+  }
+
+  if (url.pathname === "/api/admin/control" && request.method === "POST") {
+    return handleSaveControl(request, response);
+  }
+
+  if (url.pathname === "/api/admin/network" && request.method === "GET") {
+    return sendJson(response, {
+      httpPort: HTTP_PORT,
+      httpsPort: HTTPS_PORT,
+      urls: networkUrls({ httpPort: HTTP_PORT, httpsPort: HTTPS_PORT })
+    });
+  }
+
+  if (url.pathname === "/api/admin/qr.svg" && request.method === "GET") {
+    response.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" });
+    return response.end(await qrSvg(url.searchParams.get("text") || ""));
+  }
+
+  if (url.pathname === "/api/admin/report" && request.method === "GET") {
+    return sendJson(response, getShowReport());
+  }
+
+  if (url.pathname === "/api/admin/report.csv" && request.method === "GET") {
+    const date = new Date().toISOString().slice(0, 10);
+    response.writeHead(200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="show-report-${date}.csv"`
+    });
+    return response.end(showReportCsv());
+  }
+
+  if (url.pathname === "/api/admin/meters" && request.method === "POST") {
+    return handleMeters(request, response);
+  }
+
+  if (url.pathname === "/api/status") {
+    return sendJson(response, publicStatePatch());
+  }
+
+  if (url.pathname === "/events") {
+    return handleEvents(request, response);
+  }
+
+  return serveStatic(url.pathname, response);
 }
 
 export function startHeartbeat() {
@@ -176,6 +254,58 @@ async function handleSaveMacSettings(request, response) {
     settings: publicSettings(),
     server: publicServerSettings()
   });
+}
+
+async function handleControl(request, response, action) {
+  if (action === "actions" && request.method === "GET") {
+    return sendJson(response, { actions: listControlActions(), enabled: getSettings().control.enabled });
+  }
+
+  if (action === "midi-mappings" && request.method === "GET") {
+    return sendJson(response, { midiMappings: getSettings().control.midiMappings });
+  }
+
+  if (request.method !== "POST") {
+    return sendJson(response, { error: "Use POST for control actions." }, 405);
+  }
+
+  const body = await readBody(request).catch(() => ({}));
+  const result = await runControlAction(action, body, broadcastPatch);
+  broadcastPatch();
+  sendJson(response, { ok: true, action, ...result });
+}
+
+async function handleSaveControl(request, response) {
+  const body = await readBody(request);
+  const next = {};
+  if (typeof body.enabled === "boolean") next.enabled = body.enabled;
+  if (body.regenerateToken) next.token = createControlToken();
+  if (Array.isArray(body.midiMappings)) {
+    next.midiMappings = body.midiMappings.slice(0, 256).map(normalizeMidiMapping).filter(Boolean);
+  }
+  await updateControlSettings(next);
+  broadcastPatch();
+  sendJson(response, { ok: true, ...publicControlSettings(), actions: listControlActions() });
+}
+
+async function handleMeters(request, response) {
+  const body = await readBody(request);
+  const levels = Array.isArray(body.levels) ? body.levels.slice(0, 8) : [];
+  broadcastMeters({
+    label: String(body.label || "").slice(0, 60),
+    at: Date.now(),
+    levels: levels.map((level) => ({
+      peak: clampLevel(level?.peak),
+      rms: clampLevel(level?.rms)
+    }))
+  });
+  response.writeHead(204);
+  response.end();
+}
+
+function clampLevel(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(1, Math.max(0, number)) : 0;
 }
 
 async function handleDisconnect(response) {

@@ -1,3 +1,15 @@
+import {
+  endingClass,
+  escapeHtml,
+  filterRunning,
+  getCueNotes,
+  getStandbyCue,
+  readCueFilter,
+  renderPageOverlay,
+  showClockInfo,
+  syncServerTime
+} from "/shared.js";
+
 const tvConnection = document.querySelector("#tvConnection");
 const tvWorkspace = document.querySelector("#tvWorkspace");
 const tvClock = document.querySelector("#tvClock");
@@ -12,6 +24,16 @@ const tvFullscreenButton = document.querySelector("#tvFullscreenButton");
 const tvWakeLockButton = document.querySelector("#tvWakeLockButton");
 const tvWakeStateBadge = document.querySelector("#tvWakeStateBadge");
 const tvVersionBadge = document.querySelector("#tvVersionBadge");
+const tvCurrent = document.querySelector("#tvCurrent");
+const tvShowClock = document.querySelector("#tvShowClock");
+const tvCurrentNotes = document.querySelector("#tvCurrentNotes");
+const tvStandby = document.querySelector("#tvStandby");
+const tvStandbyNumber = document.querySelector("#tvStandbyNumber");
+const tvStandbyName = document.querySelector("#tvStandbyName");
+const tvStandbyNotes = document.querySelector("#tvStandbyNotes");
+const tvMeters = document.querySelector("#tvMeters");
+const cueFilter = readCueFilter();
+const METER_STALE_MS = 2000;
 const VIEWER_PAGE = "dashboard";
 const VIEWER_CLIENT_ID_KEY = "qlab-screen-client-id";
 
@@ -21,6 +43,7 @@ let eventsOnline = false;
 let lastEventAt = 0;
 let wakeLock = null;
 let wakeLockWanted = false;
+let lastMetersAt = 0;
 const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
   (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -29,6 +52,8 @@ const viewerClientId = getViewerClientId();
 updateClock();
 setInterval(() => {
   updateClock();
+  renderClockAndPage();
+  if (lastMetersAt && Date.now() - lastMetersAt > METER_STALE_MS) tvMeters.hidden = true;
 }, 1000);
 
 const events = new EventSource(`/events?clientId=${encodeURIComponent(viewerClientId)}&page=${encodeURIComponent(VIEWER_PAGE)}`);
@@ -64,6 +89,10 @@ events.addEventListener("heartbeat", (event) => {
   render();
 });
 
+events.addEventListener("meters", (event) => {
+  renderMeters(JSON.parse(event.data));
+});
+
 events.onerror = () => {
   eventsOnline = false;
   render();
@@ -92,8 +121,9 @@ function render() {
   document.body.classList.toggle("qlab-connected", Boolean(serverOnline && currentState.connected && !currentState.lastError));
   document.body.classList.toggle("qlab-error", Boolean(serverOnline && currentState.lastError));
 
-  const running = currentState.running || [];
+  syncServerTime(currentState);
   const cueMap = new Map((currentState.cues || []).map((cue) => [cue.uniqueID, cue]));
+  const running = filterRunning(currentState.running || [], cueMap, cueFilter);
   const primary = pickPrimaryCue(running, cueMap);
   const fullCue = cueMap.get(primary?.uniqueID) || primary;
   const group = findGroupName(fullCue, cueMap);
@@ -111,13 +141,28 @@ function render() {
     tvConnection.textContent = currentState.connected ? "Connected" : currentState.lastError || "Disconnected";
   }
   tvVersionBadge.textContent = `v${currentState.appVersion || "0.0.0"}`;
-  tvWorkspace.textContent = currentState.workspaceName || currentState.workspaceId || "-";
+  const workspace = currentState.workspaceName || currentState.workspaceId || "-";
+  tvWorkspace.textContent = cueFilter.active ? `${workspace} · ${cueFilter.label}` : workspace;
   tvGroup.textContent = group || (running.length ? "Ungrouped cue" : "Waiting for QLab");
   tvCueNumber.textContent = primary?.number || "-";
   tvCueName.textContent = fullCue ? getCueDisplayName(fullCue) : "No cue running";
   tvProgress.style.width = `${progress}%`;
   tvElapsed.textContent = `${formatTime(elapsed)} elapsed`;
   tvRemaining.textContent = remaining == null ? "duration unavailable" : `${formatTime(remaining)} remaining`;
+  tvCurrent.dataset.ending = endingClass(remaining);
+
+  const currentNotes = getCueNotes(currentState, primary?.uniqueID);
+  tvCurrentNotes.hidden = !currentNotes;
+  tvCurrentNotes.textContent = currentNotes;
+
+  const standby = getStandbyCue(currentState, cueMap);
+  const standbyNotes = getCueNotes(currentState, standby?.uniqueID);
+  tvStandby.hidden = !standby;
+  tvStandbyNumber.textContent = standby?.number || "-";
+  tvStandbyName.textContent = standby ? getCueDisplayName(standby) || standby.type : "-";
+  tvStandbyNotes.hidden = !standbyNotes;
+  tvStandbyNotes.textContent = standbyNotes;
+  renderClockAndPage();
 
   tvRunningList.innerHTML = running.length
     ? running.map((cue) => `<div>${escapeHtml(cue.number || "-")} ${escapeHtml(getCueDisplayName(cue))}</div>`).join("")
@@ -286,14 +331,40 @@ function formatTime(seconds) {
   return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenths}`;
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  })[char]);
+function renderClockAndPage() {
+  const clock = showClockInfo(currentState.show);
+  tvShowClock.textContent = clock.state === "idle" ? "" : `${clock.label} ${clock.value}`;
+  tvShowClock.dataset.state = clock.state;
+  renderPageOverlay(currentState.page, { pageKind: VIEWER_PAGE, dept: cueFilter.dept });
+}
+
+function renderMeters(payload) {
+  const levels = payload.levels || [];
+  if (!levels.length) return;
+  lastMetersAt = Date.now();
+  tvMeters.hidden = false;
+
+  if (tvMeters.children.length !== levels.length + 1) {
+    tvMeters.innerHTML = `<span class="eyebrow tv-meter-label"></span>` + levels.map(() => `
+      <div class="meter"><span class="meter-rms"></span><span class="meter-peak"></span></div>
+    `).join("");
+  }
+
+  tvMeters.querySelector(".tv-meter-label").textContent = payload.label || "Audio";
+  levels.forEach((level, index) => {
+    const meter = tvMeters.children[index + 1];
+    meter.querySelector(".meter-rms").style.width = `${toMeterPercent(level.rms)}%`;
+    meter.querySelector(".meter-peak").style.left = `${toMeterPercent(level.peak)}%`;
+    meter.dataset.clip = level.peak >= 0.99 ? "true" : "false";
+  });
+}
+
+// Linear 0..1 amplitude to a -60..0 dBFS bar.
+function toMeterPercent(value) {
+  const amplitude = Number(value) || 0;
+  if (amplitude <= 0) return 0;
+  const db = 20 * Math.log10(amplitude);
+  return Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
 }
 
 function getViewerClientId() {

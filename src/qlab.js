@@ -3,9 +3,12 @@ import { QLAB_TCP_PORT } from "./config.js";
 import { asArray, flattenCues } from "./cues.js";
 import { broadcastChanges, broadcastPatch, broadcastSnapshot } from "./events.js";
 import { decodeOsc, decodeSlip, encodeOsc, encodeSlip, parseData } from "./osc.js";
+import { resetRunningTracking, recordRunningCues } from "./show.js";
 import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
 const pending = new Map();
+const notesCache = new Map();
+const notesInFlight = new Set();
 let pollTimer = null;
 let thumpTimer = null;
 let qlabSocket = null;
@@ -43,8 +46,11 @@ export async function connectToQlab({ host, passcode = "", workspaceId = "" }) {
     lastError: ""
   });
 
+  notesCache.clear();
+  resetRunningTracking();
   await send(host, `/workspace/${state.workspaceId}/updates`, [1]);
   await refreshAll();
+  await refreshStandby();
   pollTimer = setInterval(refreshAll, 1000);
   thumpTimer = setInterval(() => send(host, `/workspace/${state.workspaceId}/thump`).catch(() => {}), 15000);
 }
@@ -72,11 +78,14 @@ export async function refreshAll(forceCues = false) {
     ]);
 
     if (cueReply) {
-      markCuesIfChanged(flattenCues(asArray(cueReply.data)), forceCues);
+      if (markCuesIfChanged(flattenCues(asArray(cueReply.data)), forceCues)) notesCache.clear();
     }
 
     state.running = flattenCues(asArray(runningReply.data));
+    const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
+    recordRunningCues(state.running, cueMap);
     await refreshTiming();
+    refreshNotes();
     state.lastError = "";
   } catch (error) {
     state.lastError = error.message;
@@ -250,7 +259,12 @@ function handleTcpData(chunk) {
 
 function normalizeReply(packet) {
   if (packet.address?.startsWith("/update/")) {
-    const forceCues = !packet.address.includes("/playbackPosition");
+    // QLab 5 sends .../playhead, QLab 4 sends .../playbackPosition; both carry the standby cue ID.
+    const isPlayhead = /\/(playbackPosition|playhead)$/.test(packet.address);
+    if (isPlayhead) {
+      setStandby(String(packet.args[0] || ""));
+    }
+    const forceCues = !isPlayhead;
     refreshAll(forceCues).catch((error) => {
       state.lastError = error.message;
       broadcastPatch();
@@ -281,4 +295,90 @@ function normalizeReply(packet) {
   }
 
   return null;
+}
+
+// --- Standby cue (the playhead) and cue notes ---
+
+async function refreshStandby() {
+  const lists = state.cues.filter((cue) => cue.depth === 0 && cue.uniqueID);
+  for (const list of lists) {
+    const base = `/workspace/${state.workspaceId}/cue_id/${list.uniqueID}`;
+    for (const field of ["playheadId", "playbackPositionId"]) {
+      try {
+        const reply = await query(state.host, `${base}/${field}`, [], 1500);
+        if (reply.status === "ok" && reply.data && reply.data !== "none") {
+          setStandby(String(reply.data));
+          return;
+        }
+      } catch {
+        // Try the next field name / cue list.
+      }
+    }
+  }
+}
+
+function setStandby(cueId) {
+  const nextId = cueId && cueId !== "none" ? cueId : "";
+  if (nextId === state.standbyId) return;
+  state.standbyId = nextId;
+  refreshNotes();
+  broadcastPatch();
+}
+
+// Notes are fetched only for the cues screens actually show: standby and running.
+function refreshNotes() {
+  const wanted = new Set([state.standbyId, ...state.running.map((cue) => cue.uniqueID)].filter(Boolean));
+  const notes = {};
+  for (const id of wanted) {
+    if (notesCache.has(id)) {
+      if (notesCache.get(id)) notes[id] = notesCache.get(id);
+    } else {
+      loadNotes(id);
+    }
+  }
+  state.notes = notes;
+}
+
+async function loadNotes(id) {
+  if (notesInFlight.has(id) || !state.connected) return;
+  notesInFlight.add(id);
+  try {
+    const reply = await query(state.host, `/workspace/${state.workspaceId}/cue_id/${id}/notes`, [], 1500);
+    notesCache.set(id, typeof reply.data === "string" ? reply.data.trim() : "");
+  } catch {
+    notesCache.set(id, "");
+  } finally {
+    notesInFlight.delete(id);
+  }
+  refreshNotes();
+  broadcastChanges();
+}
+
+// --- Control commands (only used when control is enabled in admin) ---
+
+export async function sendWorkspaceCommand(path, args = []) {
+  if (!state.connected || !state.workspaceId) {
+    const error = new Error("Not connected to QLab.");
+    error.status = 409;
+    throw error;
+  }
+
+  const address = `/workspace/${state.workspaceId}${path}`;
+  let reply;
+  try {
+    reply = await query(state.host, address, args, 1500);
+  } catch (error) {
+    // Some QLab versions don't reply to every command; the message itself was written.
+    if (/Timed out/.test(error.message)) return { status: "sent" };
+    throw error;
+  }
+
+  if (reply.status && reply.status !== "ok") {
+    const error = new Error(reply.status === "denied"
+      ? "QLab denied the command. The OSC passcode needs control access."
+      : `QLab replied "${reply.status}" to ${path}.`);
+    error.status = 502;
+    throw error;
+  }
+  return { status: "ok", data: reply.data };
 }

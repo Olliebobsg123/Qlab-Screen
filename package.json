@@ -1,7 +1,7 @@
 {
   "name": "qlab-screen",
-  "version": "0.1.0",
-  "description": "A read-only QLab monitor for relay screens, backstage displays, and TV dashboards.",
+  "version": "0.2.0",
+  "description": "A QLab monitor and optional remote control for relay screens, backstage displays, and TV dashboards.",
   "author": "Thomas Dye",
   "private": true,
   "type": "module",
@@ -40,6 +40,8 @@
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "node-osc": "^11.4.0",
+    "qrcode": "^1.5.4",
+    "selfsigned": "^5.5.0",
     "ws": "^8.20.0",
     "zod": "^4.3.6"
   },

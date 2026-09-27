@@ -78,7 +78,7 @@ async function saveSettings(connectAfterSave) {
     if (connectAfterSave) {
       await fetchJson("/api/connect", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Mac-Owner-Token": token },
         body: JSON.stringify({
           host: fields.host.value,
           passcode,

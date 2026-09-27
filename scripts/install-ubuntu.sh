@@ -10,6 +10,7 @@ REPO_URL="${REPO_URL:-${1:-}}"
 BRANCH="${BRANCH:-main}"
 PORT="${PORT:-3030}"
 QLAB_TCP_PORT="${QLAB_TCP_PORT:-53000}"
+HTTPS_PORT="${HTTPS_PORT:-3443}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-thomas}"
 
@@ -81,6 +82,7 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   cat > "${ENV_FILE}" <<EOF
 PORT=${PORT}
 QLAB_TCP_PORT=${QLAB_TCP_PORT}
+HTTPS_PORT=${HTTPS_PORT}
 ADMIN_USER=${ADMIN_USER}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
@@ -100,6 +102,7 @@ echo "Service: ${APP_NAME}"
 echo "App directory: ${APP_DIR}"
 echo "Environment: ${ENV_FILE}"
 echo "Open: http://$(hostname -I | awk '{print $1}'):${PORT}"
+echo "MIDI control (HTTPS): https://$(hostname -I | awk '{print $1}'):${HTTPS_PORT}/midi.html"
 echo
 echo "Useful commands:"
 echo "  sudo systemctl status ${APP_NAME}"

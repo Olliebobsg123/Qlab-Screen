@@ -1,12 +1,24 @@
 # QLab Connect
 
-QLab Connect is a read-only Node.js web monitor for a remote QLab workspace. It is designed for show relay screens, backstage displays, and TV dashboards where people need to see what QLab is doing without having any ability to control the show.
+QLab Connect is a Node.js web monitor for a remote QLab workspace. It is designed for show relay screens, backstage displays, and TV dashboards where people need to see what QLab is doing.
+
+It is read-only by default. An admin can optionally turn on remote control (GO, stop, pause, panic) for a stage manager page, MIDI keyboards plugged into any device on the network, and Stream Deck / Companion buttons.
 
 The app connects to QLab over TCP OSC, reads cue information, watches what is running, and serves browser views for operators and displays.
 
 ## Features
 
-- Read-only QLab connection using OSC over TCP.
+- QLab connection using OSC over TCP (read-only unless control is turned on).
+- Standby / "next GO" cue with its QLab notes on every screen.
+- Show clock, interval countdown and a GO log you can export as a CSV show report.
+- Countdown warnings: running cues turn amber at 10 seconds left and flash red at 5.
+- Department views (sound, lighting, video, stage, show control, or a custom filter).
+- Backstage paging: full-screen calls ("Beginners please") on every screen.
+- Optional remote control page with a big GO button, hold-to-panic, and cue-by-number.
+- MIDI control from a keyboard plugged into any device on the network (Web MIDI).
+- HTTP control API for Stream Deck, Bitfocus Companion and scripts.
+- Live audio meters on the TV dashboard, fed from any device that can hear the show.
+- Network addresses printed at startup and QR codes on the admin page.
 - Admin-protected saved connection settings.
 - Main monitor view showing:
 
@@ -39,8 +51,12 @@ The app connects to QLab over TCP OSC, reads cue information, watches what is ru
 - Admin settings: `http://localhost:3030/admin.html`
 - TV dashboard: `http://localhost:3030/dashboard.html`
 - Live viewers: `http://localhost:3030/viewers.html`
+- Stage manager control: `http://localhost:3030/control.html`
+- MIDI control: `https://localhost:3443/midi.html` (must be HTTPS, see below)
+- Show report: `http://localhost:3030/report.html`
+- Audio meter source: `https://localhost:3443/meter-source.html`
 
-Admin uses HTTP Basic Auth.
+Admin, viewers, control, MIDI, report and meter source pages use HTTP Basic Auth.
 
 Default login:
 
@@ -97,6 +113,104 @@ In QLab:
 
 QLab Connect uses TCP OSC because large cue-list replies can exceed UDP packet limits.
 
+To use remote control, the passcode also needs **control** access, and control must be turned on in the admin page. Remote control needs QLab 5 for the playhead next/previous commands. On QLab 4 the app falls back to the older command names.
+
+## Show Control Features
+
+### Standby cue and notes
+
+Every screen shows the cue QLab's playhead is on (the next GO) and the text from that cue's **Notes** field in QLab. Running cues show their notes too. Use notes for stage manager instructions such as "Wait for actor to sit".
+
+### Department views
+
+Pick a department from the drop-down on the monitor, or add it to the URL. This works on the TV dashboard too:
+
+- `/?dept=sound`: Audio, Mic, Fade and MIDI File cues, plus cues whose names include SQ, SND, FX or SFX
+- `/?dept=lighting`: Light cues, plus names with LX or LQ
+- `/?dept=video`: Video, Camera, Text and Fade cues, plus names with VQ, VID, VIDEO or PROJ
+- `/?dept=stage`: Memo cues, plus names with SM, DSM, FLY or STAGE
+- `/?dept=show`: Network, MIDI, OSC, Timecode and Script cues
+- Custom: `/?types=audio,mic&color=red&text=band` (every part is optional)
+
+Add `&warn=15` to change when the countdown warning starts (the default is 10 seconds).
+
+### Show clock and show report
+
+The show clock starts on the first cue fired, or when you press **Start show** on the control page. The control page also has **Start interval** (with a planned length, so every screen counts down), **End interval** and **End show**.
+
+Every cue that starts in QLab is logged with a timestamp. The show report page summarises the running time, interval time and stage time, and **Download CSV** exports the full log. The log is saved to `show-log.json` next to `settings.json`, so it survives a restart.
+
+### Backstage paging
+
+On the control page, use a preset button or type a message. Choose which screens receive it (all, TV dashboards, monitors, or one department) and when it clears itself. The call covers the screen until it expires, is cleared, or someone taps "Dismiss on this screen".
+
+### Remote control
+
+1. In QLab, give the passcode **control** access.
+2. In **Admin → QLab control**, tick **Allow QLab control from this server**.
+3. Open `/control.html`. It has a big GO button, Previous/Next playhead, Pause/Resume/Stop all, **hold to panic**, hard stop (with confirmation), and start or standby a cue by number.
+
+Safety measures:
+
+- Control is off by default.
+- GO presses within 350 ms of each other count as one.
+- Panic needs a press-and-hold.
+- Every remote command is recorded in the show report.
+- Keyboard shortcuts (Space = GO, Esc = Panic) are opt-in on each device.
+
+### MIDI keyboards on any device
+
+Plug a MIDI keyboard or controller into any laptop or Android device on the same network. It doesn't have to be the QLab Mac. Then:
+
+1. On that device, open `https://<server-ip>:3443/midi.html` in Chrome, Edge, Opera or Firefox. Safari and iPhone/iPad don't support Web MIDI.
+2. The first time, the browser warns about the self-signed certificate. Choose **Advanced → Proceed**, then log in with the admin account.
+3. Press **Connect MIDI devices** and allow MIDI access.
+4. Press **Add starter keyboard layout**, or use **Learn from MIDI**: press a key, then pick an action.
+
+Starter layout:
+
+| Key | Action |
+| --- | --- |
+| C4 (60) | GO |
+| D4 (62) | Playhead next |
+| B3 (59) | Playhead previous |
+| E4 (64) | Pause all |
+| F4 (65) | Resume all |
+| G4 (67) | Stop all |
+| C2 (36) | Panic |
+
+Mappings can use notes, CCs or program changes, on one channel or any channel. A CC fires once each time its value crosses 64, so a sustain pedal works as a GO pedal. Mappings are saved on the server, so every MIDI page shares them. Each device has its own **Armed** switch. Keep the MIDI tab open while the show runs.
+
+Browsers only allow Web MIDI on secure (HTTPS) pages, which is why the server also runs HTTPS on port 3443.
+
+### Stream Deck, Companion and scripts
+
+Copy the control token from the admin page and send a `POST` request with an `X-Control-Token` header:
+
+```bash
+curl -X POST -H "X-Control-Token: <token>" http://<server-ip>:3030/api/control/go
+curl -X POST -H "X-Control-Token: <token>" -H "Content-Type: application/json" \
+  -d '{"cue":"42"}' http://<server-ip>:3030/api/control/startCue
+curl -X POST -H "X-Control-Token: <token>" -H "Content-Type: application/json" \
+  -d '{"text":"Places please","durationSec":60}' http://<server-ip>:3030/api/control/page
+```
+
+Actions:
+
+- QLab commands (need control turned on): `go`, `next`, `previous`, `pause`, `resume`, `stop`, `panic`, `hardStop`, `startCue`, `stopCue`, `standby`
+- Paging and show clock (always available): `page`, `clearPage`, `showStart`, `showEnd`, `intervalStart`, `intervalEnd`, `showReset`
+
+In Bitfocus Companion, use the **Generic HTTP** module. On a Stream Deck without Companion, use a plugin that can send POST requests with headers, such as API Ninja.
+
+### Audio meters
+
+QLab's OSC interface doesn't stream live output levels, so meters come from a browser instead:
+
+1. On a computer that can hear the show audio, open `/meter-source.html`. This could be the QLab Mac using a loopback device such as BlackHole, or a laptop fed from the desk.
+2. Pick the input and press **Start sending levels**.
+
+Every TV dashboard then shows live peak and RMS meters. The meters hide themselves when levels stop arriving. Audio input also needs HTTPS, unless the page is opened on the server itself at `http://localhost`.
+
 ## Local Development
 
 Install dependencies:
@@ -132,7 +246,21 @@ PORT=3030
 QLAB_TCP_PORT=53000
 ADMIN_USER=admin
 ADMIN_PASSWORD=thomas
+HTTPS_PORT=3443          # 0 turns HTTPS off
+TLS_CERT_PATH=           # optional: your own certificate instead of the self-signed one
+TLS_KEY_PATH=
 ```
+
+When `TLS_CERT_PATH` and `TLS_KEY_PATH` are not set, a self-signed certificate is created in `tls/` next to `settings.json`. It covers `localhost`, the machine's hostname and its current LAN IP addresses, and is regenerated when those addresses change.
+
+At startup the server prints the addresses other devices can use:
+
+```text
+Open from other devices on this network:
+  http://192.168.1.50:3030   (MIDI/control: https://192.168.1.50:3443/midi.html)
+```
+
+The admin page shows the same links as QR codes.
 
 Saved QLab connection details are stored in `settings.json` at the project root. This file can contain a QLab host/passcode, so it is intentionally ignored by Git.
 
@@ -187,6 +315,12 @@ src/qlab.js               QLab TCP OSC connection, polling, timing
 src/osc.js                OSC and SLIP encode/decode helpers
 src/cues.js               Cue flattening helpers
 src/viewers.js            Live viewer tracking and presence state
+src/control.js            Control actions (GO, panic, paging, show clock) and token auth
+src/show.js               Show clock, intervals, GO log and CSV report
+src/paging.js             Backstage paging message
+src/network.js            LAN addresses and QR codes
+src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
+public/shared.js          Browser helpers: departments, standby, show clock, paging overlay
 public/                   Browser UI
 deploy/qlabconnect.service systemd unit
 scripts/install-ubuntu.sh Ubuntu installer
@@ -263,7 +397,9 @@ If you only changed frontend files in `public/`, a restart is usually not requir
 - Admin settings are protected with HTTP Basic Auth.
 - The live viewers page is also protected with HTTP Basic Auth.
 - Use a strong `ADMIN_PASSWORD` in `/etc/qlabconnect.env`.
-- Use a QLab passcode with view-only access.
+- Use a QLab passcode with view-only access unless you need remote control.
+- Remote control is off by default. When it's on, anyone with the admin login or the control token can fire cues, so treat the token like a password and use **New token** if it leaks.
+- Connecting and disconnecting QLab (`/api/connect`, `/api/disconnect`) require the admin login.
 - Do not expose this service directly to the public internet.
 
 ## License

@@ -1,4 +1,7 @@
 import { APP_VERSION } from "./config.js";
+import { publicPage } from "./paging.js";
+import { controlSettings } from "./settings.js";
+import { publicShowState } from "./show.js";
 
 export const state = {
   connected: false,
@@ -10,6 +13,8 @@ export const state = {
   cues: [],
   running: [],
   time: {},
+  standbyId: "",
+  notes: {},
   polling: false
 };
 
@@ -29,7 +34,9 @@ export function setDisconnected(next = {}) {
     lastError: next.lastError || "",
     cues: [],
     running: [],
-    time: {}
+    time: {},
+    standbyId: "",
+    notes: {}
   });
   cuesVersion += 1;
   cuesDirty = true;
@@ -42,7 +49,9 @@ export function markCuesIfChanged(nextCues, force = false) {
     cuesSignature = nextSignature;
     cuesVersion += 1;
     cuesDirty = true;
+    return true;
   }
+  return false;
 }
 
 export function publicStateSnapshot() {
@@ -57,7 +66,9 @@ export function publicStatePatch() {
     ...publicStateMeta(),
     running: state.running,
     time: state.time,
-    cuesVersion
+    cuesVersion,
+    // Lets browsers correct for clock drift when showing the show clock and countdowns.
+    serverTime: Date.now()
   };
 }
 
@@ -70,7 +81,12 @@ export function publicStateMeta() {
     workspaceName: state.workspaceName,
     lastError: state.lastError,
     lastMessageAt: state.lastMessageAt,
-    polling: state.polling
+    polling: state.polling,
+    standbyId: state.standbyId,
+    notes: state.notes,
+    show: publicShowState(),
+    page: publicPage(),
+    controlEnabled: controlSettings().enabled
   };
 }
 

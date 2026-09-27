@@ -1,3 +1,17 @@
+import {
+  applyDepartment,
+  departmentOptionsHtml,
+  endingClass,
+  filterCueList,
+  filterRunning,
+  getCueNotes,
+  getStandbyCue,
+  readCueFilter,
+  renderPageOverlay,
+  showClockInfo,
+  syncServerTime
+} from "/shared.js";
+
 const statusText = document.querySelector("#statusText");
 const workspaceHero = document.querySelector("#workspaceHero");
 const workspaceText = document.querySelector("#workspaceText");
@@ -20,6 +34,17 @@ const fullscreenButton = document.querySelector("#fullscreenButton");
 const wakeLockButton = document.querySelector("#wakeLockButton");
 const wakeStateBadge = document.querySelector("#wakeStateBadge");
 const versionBadge = document.querySelector("#versionBadge");
+const deptSelect = document.querySelector("#deptSelect");
+const showClockCell = document.querySelector("#showClockCell");
+const showClockLabel = document.querySelector("#showClockLabel");
+const showClockValue = document.querySelector("#showClockValue");
+const standbyCard = document.querySelector("#standbyCard");
+const standbyNumber = document.querySelector("#standbyNumber");
+const standbyName = document.querySelector("#standbyName");
+const standbyNotes = document.querySelector("#standbyNotes");
+const mobileStandby = document.querySelector("#mobileStandby");
+const mobileStandbyNotes = document.querySelector("#mobileStandbyNotes");
+const cueFilter = readCueFilter();
 const VIEWER_PAGE = "monitor";
 const VIEWER_CLIENT_ID_KEY = "qlab-screen-client-id";
 
@@ -34,6 +59,8 @@ let wakeLock = null;
 let wakeLockWanted = false;
 let lastCueVersion = -1;
 let lastRunningIdsKey = "";
+let lastStandbyId = "";
+let lastRenderedCues = null;
 let fullStateRequest = null;
 let lastFullStateFetchAt = 0;
 const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -78,6 +105,11 @@ events.onerror = () => {
 
 pollState();
 setInterval(pollState, 2000);
+setInterval(renderClockAndPage, 1000);
+
+deptSelect.innerHTML = departmentOptionsHtml(cueFilter);
+deptSelect.addEventListener("change", () => applyDepartment(deptSelect.value));
+if (cueFilter.active) document.querySelector(".hero-block .eyebrow").textContent = `QLab Screen · ${cueFilter.label}`;
 
 cueList.addEventListener("scroll", () => {
   if (autoScrolling) return;
@@ -101,6 +133,9 @@ ensureFullState();
 
 function render(state) {
   currentState = state || {};
+  syncServerTime(currentState);
+  const allCueMap = new Map((currentState.cues || []).map((cue) => [cue.uniqueID, cue]));
+  const visibleRunning = filterRunning(currentState.running || [], allCueMap, cueFilter);
   const runningIds = new Set((currentState.running || []).map((cue) => cue.uniqueID));
   const runningIdsKey = Array.from(runningIds).sort().join("|");
   document.body.classList.toggle("server-offline", !serverOnline);
@@ -120,17 +155,23 @@ function render(state) {
   versionBadge.textContent = `v${currentState.appVersion || "0.0.0"}`;
   const currentGroup = getCurrentGroup(currentState) || "-";
   workspaceText.textContent = currentGroup;
-  runningCount.textContent = String((currentState.running || []).length);
+  runningCount.textContent = String(visibleRunning.length);
   const updateTime = currentState.lastMessageAt ? new Date(currentState.lastMessageAt).toLocaleTimeString() : "-";
   lastUpdate.textContent = updateTime;
 
-  cueCount.textContent = `${(currentState.cues || []).length} cues`;
-  renderCueList(runningIds, runningIdsKey);
+  const visibleCues = filterCueList(currentState.cues || [], cueFilter);
+  cueCount.textContent = cueFilter.active
+    ? `${visibleCues.length} of ${(currentState.cues || []).length} cues`
+    : `${visibleCues.length} cues`;
+  renderCueList(visibleCues, runningIds, runningIdsKey);
 
-  runningList.classList.toggle("empty", !currentState.running?.length);
-  runningList.innerHTML = currentState.running?.length
-    ? currentState.running.map(renderRunningCue).join("")
+  runningList.classList.toggle("empty", !visibleRunning.length);
+  runningList.innerHTML = visibleRunning.length
+    ? visibleRunning.map(renderRunningCue).join("")
     : "Nothing running.";
+
+  renderStandby(allCueMap);
+  renderClockAndPage();
 
   if (currentState.connected && !currentState.cues?.length) {
     ensureFullState();
@@ -140,18 +181,46 @@ function render(state) {
   requestAnimationFrame(() => scrollToActiveCue(currentState));
 }
 
-function renderCueList(runningIds, runningIdsKey) {
-  const cues = currentState.cues || [];
+function renderCueList(cues, runningIds, runningIdsKey) {
   const cueVersion = Number(currentState.cuesVersion || 0);
-  if (cueVersion === lastCueVersion && runningIdsKey === lastRunningIdsKey) return;
+  const standbyId = currentState.standbyId || "";
+  const sourceCues = currentState.cues || [];
+  if (cueVersion === lastCueVersion && runningIdsKey === lastRunningIdsKey &&
+    standbyId === lastStandbyId && sourceCues === lastRenderedCues) return;
 
   cueList.classList.toggle("empty", cues.length === 0);
   cueList.innerHTML = cues.length
-    ? cues.map((cue) => renderCue(cue, runningIds.has(cue.uniqueID))).join("")
-    : "No cues loaded.";
+    ? cues.map((cue) => renderCue(cue, runningIds.has(cue.uniqueID), cue.uniqueID === standbyId)).join("")
+    : (cueFilter.active && currentState.cues?.length ? `No ${cueFilter.label.toLowerCase()} cues.` : "No cues loaded.");
 
   lastCueVersion = cueVersion;
   lastRunningIdsKey = runningIdsKey;
+  lastStandbyId = standbyId;
+  lastRenderedCues = sourceCues;
+}
+
+function renderStandby(cueMap) {
+  const standby = getStandbyCue(currentState, cueMap);
+  const notes = getCueNotes(currentState, standby?.uniqueID);
+  const hiddenByFilter = standby && !cueFilter.matches(standby) && cueFilter.active;
+  standbyCard.classList.toggle("muted-standby", Boolean(hiddenByFilter));
+  standbyNumber.textContent = standby?.number || "-";
+  standbyName.textContent = standby
+    ? `${getCueDisplayName(standby) || formatCueType(standby.type)}${hiddenByFilter ? " (other department)" : ""}`
+    : (currentState.connected ? "No standby cue" : "Waiting for QLab");
+  standbyNotes.hidden = !notes;
+  standbyNotes.textContent = notes;
+  mobileStandby.textContent = standby ? `${standby.number || "-"}  ${getCueDisplayName(standby)}` : "-";
+  mobileStandbyNotes.hidden = !notes;
+  mobileStandbyNotes.textContent = notes;
+}
+
+function renderClockAndPage() {
+  const clock = showClockInfo(currentState?.show);
+  showClockLabel.textContent = clock.label;
+  showClockValue.textContent = clock.value;
+  showClockCell.dataset.state = clock.state;
+  renderPageOverlay(currentState?.page, { pageKind: VIEWER_PAGE, dept: cueFilter.dept });
 }
 
 async function toggleFullscreen() {
@@ -258,7 +327,7 @@ function syncViewControls() {
 
 function renderMobileGlance(state, currentGroup, updateTime) {
   const cueMap = new Map((state.cues || []).map((cue) => [cue.uniqueID, cue]));
-  const primary = pickPrimaryCue(state.running || [], cueMap);
+  const primary = pickPrimaryCue(filterRunning(state.running || [], cueMap, cueFilter), cueMap);
   const fullCue = cueMap.get(primary?.uniqueID) || primary;
   const timing = state.time?.[primary?.uniqueID] || {};
   const elapsed = Number(timing.actionElapsed || 0);
@@ -274,7 +343,8 @@ function renderMobileGlance(state, currentGroup, updateTime) {
   mobileProgress.style.width = `${progress}%`;
   mobileElapsed.textContent = `${formatTime(elapsed)} elapsed`;
   mobileRemaining.textContent = remaining == null ? "duration unavailable" : `${formatTime(remaining)} remaining`;
-  mobileRunningCount.textContent = `${(state.running || []).length} running`;
+  mobileProgress.parentElement.dataset.ending = endingClass(remaining);
+  mobileRunningCount.textContent = `${filterRunning(state.running || [], cueMap, cueFilter).length} running`;
   mobileWorkspace.textContent = state.workspaceName || "No workspace";
 }
 
@@ -325,7 +395,7 @@ function mergeStatePatch(previousState, patch) {
   };
 }
 
-function renderCue(cue, isRunning) {
+function renderCue(cue, isRunning, isStandby) {
   const isDisabled = Number(cue.armed) === 0;
   const isGroup = cue.type === "Group" || cue.type === "Cue List";
   const displayName = getCueDisplayName(cue);
@@ -338,7 +408,7 @@ function renderCue(cue, isRunning) {
     ? `<div class="cue-live-time">${escapeHtml(formatTime(elapsed))}${remaining != null ? ` / ${escapeHtml(formatTime(remaining))}` : ""}</div>`
     : "";
   return `
-    <article class="cue-row ${isRunning ? "running" : ""} ${isDisabled ? "disabled" : ""} ${isGroup ? "group-row" : ""}" data-cue-id="${escapeHtml(cue.uniqueID)}" data-parent-id="${escapeHtml(cue.parentId || "")}" style="--depth:${Number(cue.depth || 0)}">
+    <article class="cue-row ${isRunning ? "running" : ""} ${isStandby ? "standby" : ""} ${isDisabled ? "disabled" : ""} ${isGroup ? "group-row" : ""}" data-cue-id="${escapeHtml(cue.uniqueID)}" data-parent-id="${escapeHtml(cue.parentId || "")}" style="--depth:${Number(cue.depth || 0)}">
       <div class="cue-number">${escapeHtml(cue.number || "-")}</div>
       <div class="cue-title cue-indent">
         ${renderCueSwatch(cue)}
@@ -353,17 +423,21 @@ function renderCue(cue, isRunning) {
         ${cue.flagged ? '<span class="badge warn">F</span>' : ""}
         ${isDisabled ? '<span class="badge danger">D</span>' : ""}
         ${isRunning ? '<span class="badge">RUN</span>' : ""}
+        ${isStandby ? '<span class="badge standby-badge">NEXT</span>' : ""}
       </div>
     </article>
   `;
 }
 
 function scrollToActiveCue(state) {
-  if (!state?.cues?.length || !state.running?.length) return;
+  if (!state?.cues?.length) return;
   if (Date.now() - userScrolledAt < 5000) return;
 
   const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
-  const primary = pickPrimaryCue(state.running, cueMap);
+  const running = filterRunning(state.running || [], cueMap, cueFilter);
+  // With nothing running, keep the standby cue in view instead.
+  const primary = running.length ? pickPrimaryCue(running, cueMap) : getStandbyCue(state, cueMap);
+  if (!primary) return;
   const targetCue = cueMap.get(primary?.uniqueID) || findParentInList(primary, cueMap);
   if (!targetCue?.uniqueID || targetCue.uniqueID === lastScrollTarget) return;
 
@@ -420,9 +494,10 @@ function renderRunningCue(cue) {
   const remaining = duration > 0 ? Math.max(0, duration - elapsed) : null;
   const displayName = getCueDisplayName(cue);
   const detail = getCueDetail(cue);
+  const notes = getCueNotes(currentState, cue.uniqueID);
 
   return `
-    <article class="run-card">
+    <article class="run-card ${endingClass(remaining)}">
       <div class="run-top">
         <strong class="cue-number">${escapeHtml(cue.number || "-")}</strong>
         <div class="run-main">
@@ -436,6 +511,7 @@ function renderRunningCue(cue) {
         ${duration > 0 ? `${formatTime(remaining)} remaining of ${formatTime(duration)}` : "Duration unavailable"}
         ${timing.paused ? " / paused" : ""}
       </div>
+      ${notes ? `<p class="notes-text">${escapeHtml(notes)}</p>` : ""}
     </article>
   `;
 }

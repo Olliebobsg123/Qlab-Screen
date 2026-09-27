@@ -17,6 +17,10 @@
           <a href="/">Monitor</a>
           <a href="/viewers.html">Viewers</a>
           <a href="/dashboard.html">TV Dashboard</a>
+          <a href="/control.html">Control</a>
+          <a href="/midi.html">MIDI</a>
+          <a href="/report.html">Show Report</a>
+          <a href="/meter-source.html">Meter Source</a>
         </nav>
       </section>
 
@@ -44,6 +48,39 @@
           </div>
           <p id="adminMessage" class="form-message" aria-live="polite"></p>
         </form>
+      </section>
+
+      <section class="panel admin-panel">
+        <div class="panel-head bare">
+          <h2>QLab control</h2>
+          <span id="controlState">Off</span>
+        </div>
+        <p class="help-text">
+          When on, the Control page, MIDI page and HTTP API (Stream Deck, Companion) can send GO, stop, pause and panic
+          to QLab. The saved QLab passcode must have <strong>control</strong> access. Leave this off for a read-only monitor.
+        </p>
+        <label class="toggle-row">
+          <input id="controlEnabled" type="checkbox">
+          <span>Allow QLab control from this server</span>
+        </label>
+        <div class="token-row">
+          <label>
+            <span>Control token (for Stream Deck / Companion / scripts)</span>
+            <input id="controlToken" readonly>
+          </label>
+          <button id="copyTokenButton" type="button" class="secondary">Copy</button>
+          <button id="regenerateTokenButton" type="button" class="secondary">New token</button>
+        </div>
+        <pre id="controlExample" class="code-block"></pre>
+        <p id="controlMessage" class="form-message" aria-live="polite"></p>
+      </section>
+
+      <section class="panel admin-panel">
+        <div class="panel-head bare">
+          <h2>Join from other devices</h2>
+          <span>Scan with a phone or tablet on the same network</span>
+        </div>
+        <div id="networkList" class="network-list">Loading…</div>
       </section>
     </main>
 

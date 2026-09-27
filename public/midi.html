@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QLab MIDI Control</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="midi-body">
+    <main class="shell admin-shell">
+      <section class="connection-panel" aria-label="MIDI control">
+        <div class="hero-block">
+          <p class="eyebrow">MIDI control</p>
+          <h1>MIDI → QLab</h1>
+        </div>
+        <nav class="page-links" aria-label="Pages">
+          <a href="/control.html">Control</a>
+          <a href="/">Monitor</a>
+          <a href="/admin.html">Admin</a>
+        </nav>
+      </section>
+
+      <p id="secureNotice" class="notice" hidden></p>
+      <p id="controlDisabledNotice" class="notice" hidden>
+        QLab control is turned off, so QLab actions from MIDI will be refused.
+        <a href="/admin.html">Turn on control in Admin</a>.
+      </p>
+
+      <section class="panel admin-panel">
+        <div class="midi-status-row">
+          <div>
+            <span class="label">MIDI access</span>
+            <strong id="midiAccessStatus">Not started</strong>
+          </div>
+          <div>
+            <span class="label">QLab</span>
+            <strong id="qlabStatus">-</strong>
+          </div>
+          <label class="toggle-row armed-toggle">
+            <input id="armedToggle" type="checkbox" checked>
+            <span>Armed: MIDI on this device controls QLab</span>
+          </label>
+          <button id="midiStartButton" type="button">Connect MIDI devices</button>
+        </div>
+
+        <h2 class="section-title">Inputs on this device</h2>
+        <div id="midiInputs" class="midi-inputs empty">No MIDI devices yet. Plug one in and press “Connect MIDI devices”.</div>
+
+        <h2 class="section-title">Last MIDI message</h2>
+        <div id="midiMonitor" class="midi-monitor">Press a key or move a control…</div>
+      </section>
+
+      <section class="panel admin-panel">
+        <div class="panel-head bare">
+          <h2>Mappings</h2>
+          <span>Saved on the server and shared by every MIDI device page</span>
+        </div>
+
+        <form id="mappingForm" class="mapping-form">
+          <label>
+            <span>Action</span>
+            <select name="action" id="mappingAction"></select>
+          </label>
+          <label>
+            <span>Cue number / message</span>
+            <input name="arg" autocomplete="off" placeholder="Only for cue or page actions">
+          </label>
+          <label>
+            <span>MIDI message</span>
+            <select name="type">
+              <option value="note">Note on</option>
+              <option value="cc">Control change (value ≥ 64)</option>
+              <option value="program">Program change</option>
+            </select>
+          </label>
+          <label>
+            <span>Channel (0 = any)</span>
+            <input name="channel" type="number" min="0" max="16" value="0">
+          </label>
+          <label>
+            <span>Note / CC / program number</span>
+            <input name="number" type="number" min="0" max="127" value="60">
+          </label>
+          <div class="form-actions">
+            <button id="learnButton" type="button" class="secondary">Learn from MIDI</button>
+            <button type="submit">Add mapping</button>
+          </div>
+        </form>
+        <p id="mappingMessage" class="form-message" aria-live="polite"></p>
+
+        <div id="mappingList" class="mapping-list empty">No mappings yet.</div>
+        <div class="form-actions">
+          <button id="presetButton" type="button" class="secondary">Add starter keyboard layout</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/midi.js" type="module"></script>
+  </body>
+</html>

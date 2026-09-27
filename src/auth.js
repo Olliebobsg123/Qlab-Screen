@@ -1,11 +1,22 @@
 import { ADMIN_PASSWORD, ADMIN_USER } from "./config.js";
 
+const ADMIN_PAGES = new Set([
+  "/admin.html",
+  "/admin.js",
+  "/viewers.html",
+  "/viewers.js",
+  "/control.html",
+  "/control.js",
+  "/midi.html",
+  "/midi.js",
+  "/report.html",
+  "/report.js",
+  "/meter-source.html",
+  "/meter-source.js"
+]);
+
 export function isAdminPath(pathname) {
-  return pathname === "/admin.html" ||
-    pathname === "/admin.js" ||
-    pathname === "/viewers.html" ||
-    pathname === "/viewers.js" ||
-    pathname.startsWith("/api/admin/");
+  return ADMIN_PAGES.has(pathname) || pathname.startsWith("/api/admin/");
 }
 
 export function hasAdminAuth(request) {

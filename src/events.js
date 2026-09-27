@@ -42,6 +42,11 @@ export function broadcastChanges() {
   if (changeType === "patch") broadcastEvent("patch", publicStatePatch());
 }
 
+// Audio levels skip the state patch machinery: they change many times a second.
+export function broadcastMeters(payload) {
+  broadcastEvent("meters", payload);
+}
+
 export function broadcastHeartbeat() {
   touchLiveViewers();
   broadcastEvent("heartbeat", publicStatePatch());

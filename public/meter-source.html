@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Audio Meter Source</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell admin-shell">
+      <section class="connection-panel" aria-label="Audio meter source">
+        <div class="hero-block">
+          <p class="eyebrow">Audio meters</p>
+          <h1>Meter source</h1>
+        </div>
+        <nav class="page-links" aria-label="Pages">
+          <a href="/dashboard.html">TV Dashboard</a>
+          <a href="/admin.html">Admin</a>
+        </nav>
+      </section>
+
+      <p id="meterNotice" class="notice" hidden></p>
+
+      <section class="panel admin-panel">
+        <p class="help-text">
+          Open this page on a computer that receives the show audio (for example the QLab Mac with a loopback
+          device such as BlackHole, or a laptop fed from the desk). Its levels are sent to every TV dashboard.
+          Leave this tab open while the show runs.
+        </p>
+        <form id="meterForm" class="admin-form">
+          <label>
+            <span>Audio input</span>
+            <select id="meterInput"><option value="">Default input</option></select>
+          </label>
+          <label>
+            <span>Label shown on dashboards</span>
+            <input id="meterLabel" value="Main mix" maxlength="60">
+          </label>
+          <div class="form-actions">
+            <button id="meterStart" type="submit">Start sending levels</button>
+            <button id="meterStop" type="button" class="secondary" disabled>Stop</button>
+          </div>
+        </form>
+        <div id="meterPreview" class="tv-meters meter-preview" aria-label="Local preview"></div>
+      </section>
+    </main>
+    <script src="/meter-source.js" type="module"></script>
+  </body>
+</html>

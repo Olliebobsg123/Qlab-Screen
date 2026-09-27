@@ -16,6 +16,11 @@
           <h1 id="workspaceHero">Waiting for workspace</h1>
         </div>
         <nav class="page-links" aria-label="Pages">
+          <label class="dept-picker">
+            <span class="visually-hidden">Department</span>
+            <select id="deptSelect" aria-label="Department filter"></select>
+          </label>
+          <a href="/control.html">Control</a>
           <a href="/admin.html">Admin</a>
           <a href="/viewers.html">Viewers</a>
           <a href="/dashboard.html">TV Dashboard</a>
@@ -43,6 +48,10 @@
           <span class="label">Last update</span>
           <strong id="lastUpdate">-</strong>
         </div>
+        <div id="showClockCell">
+          <span class="label" id="showClockLabel">Show clock</span>
+          <strong id="showClockValue">Not started</strong>
+        </div>
       </section>
 
       <section class="mobile-glance" aria-label="At a glance">
@@ -65,6 +74,11 @@
           <span id="mobileElapsed">--:--.- elapsed</span>
           <span id="mobileRemaining">--:--.- remaining</span>
         </div>
+        <div class="glance-next">
+          <span class="label">Standby</span>
+          <strong id="mobileStandby">-</strong>
+          <p id="mobileStandbyNotes" class="notes-text" hidden></p>
+        </div>
         <div class="glance-bottom">
           <span id="mobileRunningCount">0 running</span>
           <span id="mobileWorkspace">No workspace</span>
@@ -84,6 +98,14 @@
           <div class="panel-head">
             <h2>Running Now</h2>
             <span>live timing</span>
+          </div>
+          <div id="standbyCard" class="standby-card">
+            <span class="label">Standby / next GO</span>
+            <div class="standby-line">
+              <strong id="standbyNumber" class="cue-number">-</strong>
+              <strong id="standbyName">Waiting for QLab</strong>
+            </div>
+            <p id="standbyNotes" class="notes-text" hidden></p>
           </div>
           <div id="runningList" class="running-list empty">Nothing running.</div>
         </div>
