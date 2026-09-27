@@ -192,10 +192,17 @@ curl -X POST -H "X-Control-Token: <token>" -H "Content-Type: application/json" \
 
 #### iPhone and iPad
 
-Every iPhone and iPad browser, including Chrome, uses Safari's engine, which has no Web MIDI. So a web page on the iPhone can't read a plugged-in keyboard.
+Every iPhone and iPad browser, including Chrome, uses Safari's engine, which has no Web MIDI. So a web page on the iPhone can't read a plugged-in keyboard. There are two options instead.
 
-- **On-screen MIDI pads:** open `http://<server-ip>:3030/midi.html` on the phone. Tap the pads (two octaves, with a channel, velocity and octave picker, plus program change and CC buttons) to send real MIDI to QLab through the same pass-through.
-- **A real keyboard on the iPhone:** use a MIDI app instead of the browser. For example, the free midimittr app can send a USB keyboard's MIDI to a macOS Network MIDI session, which QLab then receives directly.
+**A real keyboard: the built-in network MIDI session.** The server runs its own network MIDI session (RTP-MIDI, also called AppleMIDI) called **QLab Connect** and announces it on the network. Anything played into it goes to the same MIDI output as the pass-through, so QLab's MIDI triggers fire. Nothing needs setting up in Audio MIDI Setup.
+
+1. Plug the keyboard into the iPhone. On a Lightning iPhone, use the Lightning to USB 3 Camera Adapter with its charging port powered.
+2. Install a free network MIDI app such as midimittr.
+3. In the app, connect to **QLab Connect** using **RTP**, not Network MIDI 2.0.
+
+The MIDI page shows which devices are connected and the last message received. The session uses UDP 5004/5005. If those ports are taken (for example by a session you made in Audio MIDI Setup), the server moves to the next free pair and prints it at startup. Set `RTP_MIDI_PORT=0` to turn the session off.
+
+**Without a keyboard: on-screen MIDI pads.** Open `http://<server-ip>:3030/midi.html` on the phone. Tap the pads (two octaves, with a channel, velocity and octave picker, plus program change and CC buttons) to send MIDI through the same pass-through.
 
 #### Use mappings on this page
 
@@ -269,6 +276,7 @@ QLAB_TCP_PORT=53000
 ADMIN_USER=admin
 ADMIN_PASSWORD=thomas
 HTTPS_PORT=3443          # 0 turns HTTPS off
+RTP_MIDI_PORT=5004       # network MIDI session (uses this port and the next); 0 turns it off
 TLS_CERT_PATH=           # optional: your own certificate instead of the self-signed one
 TLS_KEY_PATH=
 ```
@@ -343,6 +351,7 @@ src/paging.js             Backstage paging message
 src/network.js            LAN addresses and QR codes
 src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
 src/midi-out.js           MIDI pass-through: WebSocket from the MIDI page to a MIDI output port
+src/rtp-midi.js           Built-in network MIDI (RTP-MIDI) session "QLab Connect" for iPhones etc.
 public/shared.js          Browser helpers: departments, standby, show clock, paging overlay
 public/                   Browser UI
 deploy/qlabconnect.service systemd unit

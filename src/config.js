@@ -12,6 +12,8 @@ const SAVED_SERVER_CONFIG = readSavedServerConfig();
 export const HTTP_PORT = readNumber(process.env.PORT, SAVED_SERVER_CONFIG.httpPort, 3030);
 // HTTPS is needed for Web MIDI and audio input on devices other than the server. Set to 0 to disable.
 export const HTTPS_PORT = readOptionalPort(process.env.HTTPS_PORT, SAVED_SERVER_CONFIG.httpsPort, 3443);
+// Network MIDI (RTP-MIDI / AppleMIDI) session for iPhones and other devices. Uses this port and the next. 0 disables.
+export const RTP_MIDI_PORT = readOptionalPort(process.env.RTP_MIDI_PORT, SAVED_SERVER_CONFIG.rtpMidiPort, 5004);
 export const TLS_CERT_PATH = process.env.TLS_CERT_PATH || "";
 export const TLS_KEY_PATH = process.env.TLS_KEY_PATH || "";
 export const QLAB_TCP_PORT = readNumber(process.env.QLAB_TCP_PORT, SAVED_SERVER_CONFIG.qlabTcpPort, 53000);

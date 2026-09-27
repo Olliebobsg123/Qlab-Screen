@@ -1830,3 +1830,36 @@ a.tool-button {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-left: 22px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.steps a {
+  color: var(--warn);
+}
+
+.network-participants {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.participant {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--running);
+  border-radius: 6px;
+  background: var(--running-soft);
+}
+
+.participant span {
+  color: var(--muted);
+}

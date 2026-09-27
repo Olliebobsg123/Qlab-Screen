@@ -80,6 +80,26 @@
         <div id="midiMonitor" class="midi-monitor">Press a key or move a control…</div>
       </section>
 
+      <section id="networkPanel" class="panel admin-panel">
+        <div class="panel-head bare">
+          <h2>Keyboard on an iPhone or iPad</h2>
+          <span id="networkState" class="status-chip" data-state="off">Checking…</span>
+        </div>
+        <p class="help-text">
+          This server runs its own network MIDI session called <strong>QLab Connect</strong>.
+          Anything that plays into it goes straight to QLab's MIDI triggers. You don't need to set anything up on the Mac.
+        </p>
+        <ol class="steps">
+          <li>Plug the keyboard into the iPhone. On older iPhones use Apple's Lightning to USB 3 Camera Adapter with its charging port powered.</li>
+          <li>Install a free network MIDI app from the App Store, such as <strong>midimittr</strong>.</li>
+          <li>Open the app, allow local network access, and connect to <strong>QLab Connect</strong> (choose <strong>RTP</strong>, not Network MIDI 2.0).</li>
+          <li>Play a key. The phone appears below and the notes go to QLab.</li>
+        </ol>
+        <div id="networkParticipants" class="network-participants">No devices connected yet.</div>
+        <p id="networkLast" class="help-text"></p>
+        <p id="networkManual" class="help-text"></p>
+      </section>
+
       <section id="padsPanel" class="panel admin-panel">
         <div class="panel-head bare">
           <h2>On-screen MIDI pads</h2>

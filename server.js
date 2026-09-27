@@ -6,12 +6,14 @@ import { getSettings } from "./src/settings.js";
 import { state } from "./src/state.js";
 import { broadcastSnapshot } from "./src/events.js";
 import { attachMidiSocket, initMidiOutput } from "./src/midi-out.js";
+import { startRtpMidi } from "./src/rtp-midi.js";
 import { loadTlsCredentials } from "./src/tls.js";
 
 export function startServer() {
   const server = createHttpServer();
   attachMidiSocket(server);
   initMidiOutput();
+  startRtpMidi();
 
   server.listen(HTTP_PORT, () => {
     console.log(`QLab Screen is running at http://localhost:${HTTP_PORT}`);

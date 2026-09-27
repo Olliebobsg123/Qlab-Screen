@@ -16,6 +16,7 @@ const mappingMessage = $("#mappingMessage");
 const mappingList = $("#mappingList");
 const passthroughPanel = $("#passthroughPanel");
 const padsPanel = $("#padsPanel");
+const networkPanel = $("#networkPanel");
 const padGrid = $("#padGrid");
 const padChannel = $("#padChannel");
 const padVelocity = $("#padVelocity");
@@ -89,12 +90,14 @@ await loadSettings();
 setupPads();
 applyMode();
 loadOutputs();
+setInterval(loadOutputs, 3000);
 connectSocket();
 checkEnvironment();
 
 function applyMode() {
   passthroughPanel.hidden = mode !== "passthrough";
   padsPanel.hidden = mode !== "passthrough";
+  networkPanel.hidden = mode !== "passthrough";
   mappingsPanel.hidden = mode !== "mappings";
 }
 
@@ -142,7 +145,41 @@ async function saveOutput(port) {
   renderOutputs(await response.json());
 }
 
+function renderNetwork(network, outputOpen) {
+  if (!network) return;
+  const state = $("#networkState");
+  const people = network.participants || [];
+  if (!network.running) {
+    state.dataset.state = "off";
+    state.textContent = "Off";
+  } else if (people.length) {
+    state.dataset.state = "on";
+    state.textContent = `${people.length} connected`;
+  } else {
+    state.dataset.state = "pending";
+    state.textContent = "Waiting for a device";
+  }
+
+  $("#networkParticipants").innerHTML = people.length
+    ? people.map((person) => `<div class="participant"><strong>${escapeHtml(person.name)}</strong><span>${escapeHtml(person.address)}</span></div>`).join("")
+    : (network.running ? "No devices connected yet." : escapeHtml(network.error || "The network MIDI session isn't running."));
+
+  const last = network.lastMessage;
+  $("#networkLast").textContent = last
+    ? `Last from ${last.from || "device"}: ${describeRaw(last.bytes)} ${last.error ? `(not sent: ${last.error})` : "→ QLab"}`
+    : "";
+  if (!outputOpen && network.running) {
+    $("#networkLast").textContent += " The server has no MIDI output open, so nothing reaches QLab yet.";
+  }
+
+  const host = location.hostname;
+  $("#networkManual").textContent = network.running
+    ? `If the app doesn't list QLab Connect, add it by hand: address ${host}, port ${network.port}.`
+    : "";
+}
+
 function renderOutputs(status) {
+  renderNetwork(status.network, status.open);
   const options = [];
   if (status.virtualSupported) {
     options.push(["virtual", `Virtual port “${status.virtualName}” (QLab on the same Mac as this server)`]);
@@ -151,9 +188,14 @@ function renderOutputs(status) {
   if (status.selected && !options.some(([value]) => value === status.selected)) {
     options.push([status.selected, `${status.selected} (not connected)`]);
   }
-  outputSelect.innerHTML = options
+  const optionsHtml = options
     .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === status.selected ? "selected" : ""}>${escapeHtml(label)}</option>`)
     .join("");
+  // This refreshes every few seconds: don't rebuild the list under someone who is choosing from it.
+  if (optionsHtml !== outputSelect.dataset.rendered && document.activeElement !== outputSelect) {
+    outputSelect.innerHTML = optionsHtml;
+    outputSelect.dataset.rendered = optionsHtml;
+  }
 
   if (!status.available) {
     outputStatus.textContent = status.error || "MIDI output isn't available on the server.";

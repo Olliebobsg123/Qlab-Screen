@@ -8,6 +8,7 @@ import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
 import { midiOutputStatus, selectMidiOutput, sendMidiBytes } from "./midi-out.js";
 import { networkUrls, qrSvg } from "./network.js";
+import { rtpMidiStatus } from "./rtp-midi.js";
 import { connectToQlab, disconnectQlab } from "./qlab.js";
 import {
   createControlToken,
@@ -113,12 +114,12 @@ async function routeRequest(request, response) {
   }
 
   if (url.pathname === "/api/admin/midi-output" && request.method === "GET") {
-    return sendJson(response, midiOutputStatus());
+    return sendJson(response, { ...midiOutputStatus(), network: rtpMidiStatus() });
   }
 
   if (url.pathname === "/api/admin/midi-output" && request.method === "POST") {
     const body = await readBody(request);
-    return sendJson(response, await selectMidiOutput(body.port));
+    return sendJson(response, { ...(await selectMidiOutput(body.port)), network: rtpMidiStatus() });
   }
 
   if (url.pathname === "/api/admin/network" && request.method === "GET") {
