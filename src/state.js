@@ -14,6 +14,7 @@ export const state = {
   running: [],
   time: {},
   standbyId: "",
+  playheads: {},
   notes: {},
   polling: false
 };
@@ -36,6 +37,7 @@ export function setDisconnected(next = {}) {
     running: [],
     time: {},
     standbyId: "",
+    playheads: {},
     notes: {}
   });
   cuesSignature = JSON.stringify(state.cues);
@@ -85,6 +87,7 @@ export function publicStateMeta() {
     lastMessageAt: state.lastMessageAt,
     polling: state.polling,
     standbyId: state.standbyId,
+    playheads: state.playheads,
     notes: state.notes,
     show: publicShowState(),
     page: publicPage(),

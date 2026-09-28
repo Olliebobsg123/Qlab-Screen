@@ -10,19 +10,21 @@
   </head>
   <body class="control-body server-offline">
     <main class="shell control-shell">
-      <section class="connection-panel" aria-label="Control">
-        <div class="hero-block">
-          <p class="eyebrow">Stage manager control</p>
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">Stage manager control</span>
           <h1 id="controlWorkspace">Waiting for QLab</h1>
         </div>
-        <nav class="page-links" aria-label="Pages">
+        <nav class="topnav" aria-label="Pages">
           <a href="/">Monitor</a>
-          <a href="/dashboard.html">TV Dashboard</a>
+          <a href="/dashboard.html">TV</a>
+          <a href="/login.html">Departments</a>
+          <a href="/control.html" aria-current="page">Control</a>
           <a href="/midi.html">MIDI</a>
-          <a href="/report.html">Show Report</a>
+          <a href="/report.html">Report</a>
           <a href="/admin.html">Admin</a>
         </nav>
-      </section>
+      </header>
 
       <p id="controlDisabledNotice" class="notice" hidden>
         QLab control is turned off. Paging and the show clock still work.

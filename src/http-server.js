@@ -6,10 +6,20 @@ import { hasControlAuth, listControlActions, runControlAction } from "./control.
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
+import {
+  adminDepartmentList,
+  departmentView,
+  login,
+  loginDepartments,
+  logout,
+  requestDepartment,
+  runDepartmentAction,
+  updateDepartments
+} from "./departments.js";
 import { midiOutputStatus, selectMidiOutput, sendMidiBytes } from "./midi-out.js";
 import { networkUrls, qrSvg } from "./network.js";
 import { connectNetworkMidi, disconnectNetworkMidi, rtpMidiStatus } from "./rtp-midi.js";
-import { connectToQlab, disconnectQlab } from "./qlab.js";
+import { connectToQlab, disconnectQlab, qlabDiagnostics } from "./qlab.js";
 import {
   createControlToken,
   getSettings,
@@ -94,6 +104,50 @@ async function routeRequest(request, response) {
 
   if (url.pathname === "/api/presence" && request.method === "POST") {
     return handlePresence(request, response);
+  }
+
+  if (url.pathname === "/api/departments" && request.method === "GET") {
+    return sendJson(response, { departments: loginDepartments() });
+  }
+
+  if (url.pathname === "/api/login" && request.method === "POST") {
+    const body = await readBody(request);
+    return sendJson(response, { ok: true, department: login(request, response, body) });
+  }
+
+  if (url.pathname === "/api/logout" && request.method === "POST") {
+    logout(response);
+    return sendJson(response, { ok: true });
+  }
+
+  if (url.pathname.startsWith("/api/dept/")) {
+    const department = requestDepartment(request, url);
+    if (!department) return sendJson(response, { error: "Please log in." }, 401);
+    if (url.pathname === "/api/dept/me" && request.method === "GET") {
+      return sendJson(response, departmentView(department));
+    }
+    if (url.pathname === "/api/dept/action" && request.method === "POST") {
+      const result = await runDepartmentAction(department, await readBody(request));
+      broadcastPatch();
+      return sendJson(response, result);
+    }
+    return sendJson(response, { error: "Not found." }, 404);
+  }
+
+  if (url.pathname === "/api/admin/qlab-info" && request.method === "GET") {
+    return sendJson(response, await qlabDiagnostics());
+  }
+
+  if (url.pathname === "/api/admin/departments" && request.method === "GET") {
+    return sendJson(response, {
+      departments: adminDepartmentList(),
+      cueLists: state.cues.filter((cue) => cue.depth === 0).map((cue) => ({ id: cue.uniqueID, name: cue.name || cue.listName || "Cue list" }))
+    });
+  }
+
+  if (url.pathname === "/api/admin/departments" && request.method === "POST") {
+    const body = await readBody(request);
+    return sendJson(response, { departments: await updateDepartments(body.departments, body.passwords) });
   }
 
   if (url.pathname === "/api/state") {

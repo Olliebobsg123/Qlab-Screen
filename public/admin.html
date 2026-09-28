@@ -8,21 +8,27 @@
   </head>
   <body>
     <main class="shell admin-shell">
-      <section class="connection-panel" aria-label="Admin settings">
-        <div>
-          <p class="eyebrow">Admin</p>
-          <h1>Saved QLab connection</h1>
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">Settings</span>
+          <h1>Admin</h1>
         </div>
-        <nav class="page-links" aria-label="Pages">
+        <nav class="topnav" aria-label="Pages">
           <a href="/">Monitor</a>
-          <a href="/viewers.html">Viewers</a>
-          <a href="/dashboard.html">TV Dashboard</a>
+          <a href="/dashboard.html">TV</a>
+          <a href="/login.html">Departments</a>
           <a href="/control.html">Control</a>
           <a href="/midi.html">MIDI</a>
-          <a href="/report.html">Show Report</a>
-          <a href="/meter-source.html">Meter Source</a>
+          <a href="/report.html">Report</a>
+          <a href="/admin.html" aria-current="page">Admin</a>
         </nav>
-      </section>
+      </header>
+
+      <div class="admin-links">
+        <a class="tool-button" href="/viewers.html">Live viewers</a>
+        <a class="tool-button" href="/meter-source.html">Audio meter source</a>
+        <a class="tool-button" href="/login.html">Department login</a>
+      </div>
 
       <section class="panel admin-panel">
         <form id="adminForm" class="admin-form">
@@ -35,8 +41,10 @@
             <input name="passcode" autocomplete="off" inputmode="numeric" placeholder="Leave blank to keep saved passcode">
           </label>
           <label>
-            <span>Workspace ID/name</span>
-            <input name="workspaceId" autocomplete="off" placeholder="Optional">
+            <span>Workspace</span>
+            <select name="workspaceId" id="workspaceSelect">
+              <option value="">First open workspace</option>
+            </select>
           </label>
           <label class="toggle-row">
             <input name="autoConnect" type="checkbox">
@@ -48,6 +56,25 @@
           </div>
           <p id="adminMessage" class="form-message" aria-live="polite"></p>
         </form>
+        <div id="qlabInfo" class="qlab-info" aria-live="polite"></div>
+      </section>
+
+      <section class="panel admin-panel">
+        <div class="panel-head bare">
+          <h2>Departments</h2>
+          <span>Each department logs in at <a href="/login.html">/login.html</a> and controls only its own cues</span>
+        </div>
+        <p class="help-text quiet">
+          Give each department its own cue list in QLab (for example “Lighting”) and pick it here. You can also match cues
+          by colour or by how their name or number starts (e.g. <code>LX</code>). If you choose a cue list and a colour/prefix,
+          only cues in that list that also match count. Departments need QLab control switched on (below).
+        </p>
+        <div id="deptEditor" class="dept-editor">Loading…</div>
+        <div class="form-actions">
+          <button id="addDeptButton" type="button" class="secondary">Add department</button>
+          <button id="saveDeptButton" type="button">Save departments</button>
+        </div>
+        <p id="deptMessage" class="form-message" aria-live="polite"></p>
       </section>
 
       <section class="panel admin-panel">

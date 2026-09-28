@@ -2,6 +2,9 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { SETTINGS_DIR, SETTINGS_PATH } from "./config.js";
 
+// Declared before loadSettings() runs below, which uses it.
+const DEPARTMENT_COLORS = new Set(["red", "orange", "yellow", "green", "blue", "purple", "magenta", "gray", "none"]);
+
 let settings = await loadSettings();
 
 export function getSettings() {
@@ -50,6 +53,18 @@ export function createControlToken() {
   return randomBytes(18).toString("base64url");
 }
 
+export function getDepartments() {
+  return settings.departments;
+}
+
+export async function saveDepartments(departments) {
+  return updateSettings({ ...settings, departments });
+}
+
+export function sessionSecret() {
+  return settings.sessionSecret;
+}
+
 export function serverSettings() {
   return settings.server;
 }
@@ -78,7 +93,8 @@ async function loadSettings() {
     const content = await readFile(SETTINGS_PATH, "utf8");
     const saved = JSON.parse(content);
     return normalizeSettings(saved);
-  } catch {
+  } catch (error) {
+    if (error.code !== "ENOENT") console.warn(`Could not read ${SETTINGS_PATH}: ${error.message}. Using defaults.`);
     return normalizeSettings({});
   }
 }
@@ -91,12 +107,33 @@ function normalizeSettings(saved) {
     workspaceId: String(saved.workspaceId || ""),
     autoConnect: Boolean(saved.autoConnect),
     control: normalizeControl(saved.control),
+    departments: Array.isArray(saved.departments) ? saved.departments.map(normalizeDepartment).filter(Boolean).slice(0, 24) : [],
+    // Signs department login cookies; kept so a server restart doesn't log everyone out.
+    sessionSecret: String(saved.sessionSecret || "") || randomBytes(32).toString("hex"),
     server: {
       httpPort: readPositiveNumber(server.httpPort, 3030),
       qlabTcpPort: readPositiveNumber(server.qlabTcpPort, 53000),
       adminUser: String(server.adminUser || "admin"),
       adminPassword: String(server.adminPassword || "thomas")
     }
+  };
+}
+
+function normalizeDepartment(saved) {
+  if (!saved || typeof saved !== "object") return null;
+  const name = String(saved.name || "").trim().slice(0, 40);
+  if (!name) return null;
+  const list = (value) => (Array.isArray(value) ? value : []).map((entry) => String(entry).trim()).filter(Boolean);
+  return {
+    id: String(saved.id || randomBytes(5).toString("hex")).replace(/[^\w-]/g, "").slice(0, 32) || randomBytes(5).toString("hex"),
+    name,
+    color: DEPARTMENT_COLORS.has(saved.color) ? saved.color : "blue",
+    // Which cues belong to this department: cue lists (by unique ID), and/or cue colours and name prefixes.
+    cueListIds: list(saved.cueListIds).slice(0, 20),
+    cueColors: list(saved.cueColors).filter((color) => DEPARTMENT_COLORS.has(color)),
+    namePrefixes: list(saved.namePrefixes).slice(0, 10).map((prefix) => prefix.slice(0, 20)),
+    passwordHash: String(saved.passwordHash || ""),
+    passwordSalt: String(saved.passwordSalt || "")
   };
 }
 

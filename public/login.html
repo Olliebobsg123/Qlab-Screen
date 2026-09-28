@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Department Login</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell login-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">QLab Connect</span>
+          <h1>Departments</h1>
+        </div>
+        <nav class="topnav" aria-label="Pages">
+          <a href="/">Monitor</a>
+          <a href="/dashboard.html">TV</a>
+          <a href="/login.html" aria-current="page">Departments</a>
+        </nav>
+      </header>
+
+      <section id="continueCard" class="panel login-card" hidden>
+        <p class="eyebrow">Signed in</p>
+        <div class="login-continue">
+          <strong id="continueName"></strong>
+          <a id="continueLink" class="button-link" href="/dept.html">Open my cues</a>
+        </div>
+      </section>
+
+      <section class="panel login-card">
+        <h2>Who are you?</h2>
+        <p class="help-text quiet">Pick your department and enter its password to control your cues.</p>
+        <div id="deptButtons" class="dept-buttons">Loading…</div>
+
+        <form id="loginForm" class="login-form" hidden>
+          <label>
+            <span id="loginLabel">Password</span>
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button type="submit">Log in</button>
+          <p id="loginMessage" class="form-message" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+    <script src="/login.js" type="module"></script>
+  </body>
+</html>

@@ -80,6 +80,7 @@ $("#pageForm").addEventListener("submit", (event) => {
   });
 });
 
+addDepartmentTargets();
 setupPanicHold();
 setupKeyboard();
 
@@ -204,4 +205,20 @@ function showMessage(text, isError = false) {
   message.classList.add("visible");
   clearTimeout(messageTimer);
   messageTimer = setTimeout(() => message.classList.remove("visible"), isError ? 5000 : 1800);
+}
+
+// Let calls go to the departments set up in Admin as well as the built-in groups.
+async function addDepartmentTargets() {
+  const { departments = [] } = await fetch("/api/departments").then((response) => response.json()).catch(() => ({}));
+  if (!departments.length) return;
+  const select = $("#pageForm").elements.target;
+  const group = document.createElement("optgroup");
+  group.label = "Departments";
+  for (const department of departments) {
+    const option = document.createElement("option");
+    option.value = department.id;
+    option.textContent = department.name;
+    group.append(option);
+  }
+  select.append(group);
 }

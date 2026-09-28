@@ -10,26 +10,33 @@
   </head>
   <body class="server-offline">
     <main class="shell">
-      <section class="connection-panel" aria-label="QLab connection">
-        <div class="hero-block">
-          <p class="eyebrow">QLab Screen</p>
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">Monitor</span>
           <h1 id="workspaceHero">Waiting for workspace</h1>
         </div>
-        <nav class="page-links" aria-label="Pages">
-          <label class="dept-picker">
-            <span class="visually-hidden">Department</span>
-            <select id="deptSelect" aria-label="Department filter"></select>
-          </label>
+        <nav class="topnav" aria-label="Pages">
+          <a href="/" aria-current="page">Monitor</a>
+          <a href="/dashboard.html">TV</a>
+          <a href="/login.html">Departments</a>
           <a href="/control.html">Control</a>
+          <a href="/midi.html">MIDI</a>
+          <a href="/report.html">Report</a>
           <a href="/admin.html">Admin</a>
-          <a href="/viewers.html">Viewers</a>
-          <a href="/dashboard.html">TV Dashboard</a>
-          <span id="wakeStateBadge" class="status-chip">Awake Off</span>
-          <span id="versionBadge" class="status-chip version-chip">v0.0.0</span>
-          <button id="fullscreenButton" type="button" class="tool-button">Fullscreen</button>
-          <button id="wakeLockButton" type="button" class="tool-button">Keep Awake</button>
         </nav>
-      </section>
+      </header>
+
+      <div class="page-tools" aria-label="Display options">
+        <label class="dept-picker">
+          <span class="visually-hidden">Department</span>
+          <select id="deptSelect" aria-label="Department filter"></select>
+        </label>
+        <span class="tools-spacer"></span>
+        <span id="wakeStateBadge" class="status-chip">Awake Off</span>
+        <span id="versionBadge" class="status-chip version-chip">v0.0.0</span>
+        <button id="fullscreenButton" type="button" class="tool-button">Fullscreen</button>
+        <button id="wakeLockButton" type="button" class="tool-button">Keep Awake</button>
+      </div>
 
       <section class="status-strip" aria-live="polite">
         <div>

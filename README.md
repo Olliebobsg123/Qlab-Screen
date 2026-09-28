@@ -144,6 +144,33 @@ Every cue that starts in QLab is logged with a timestamp. The show report page s
 
 On the control page, use a preset button or type a message. Choose which screens receive it (all, TV dashboards, monitors, or one department) and when it clears itself. The call covers the screen until it expires, is cleared, or someone taps "Dismiss on this screen".
 
+### Departments: each team controls its own cues
+
+The QLab Mac (for example a Mac mini that also runs the show's audio) can serve every department. Each team logs in from its own phone, tablet or laptop and fires only its own cues.
+
+1. In QLab, give each department its own **cue list**, for example "Lighting" or "Video". You can also mark cues with a colour or name them with a prefix such as `LX`.
+2. In **Admin → Departments**, press **Add department** and fill in:
+   - a name, colour and password
+   - which cue lists it owns
+   - optionally, cue colours or name/number prefixes (with a cue list chosen, only cues in that list that also match count)
+3. Turn on **QLab control** in Admin. The QLab passcode needs control access.
+4. Each operator opens `http://<server-ip>:3030/login.html`, taps their department and enters the password.
+
+The department page shows:
+
+- a big **GO** for each of the department's cue lists, with the next cue and its notes
+- **Previous/Next** to move that list's playhead
+- the department's running cues with **Stop** buttons, plus **Stop all my cues**
+- every cue the department owns, with **Start** and **Standby**
+
+The server checks every command. A department can't start, stop or move any cue it doesn't own, even through the API. Every department action is recorded in the show report.
+
+A login lasts 14 days, and changing a department's password signs everyone out of it. The admin can open any department's page from **Admin → Departments → Open as admin**. Backstage pages can target a single department.
+
+### Missing cues?
+
+The app shows **one QLab workspace**. If some cues (video, mic, camera and so on) never appear, check the summary under the connection settings in **Admin**. It lists every cue list the app receives and how many cues of each type it holds, and warns if other workspaces are open in QLab. Choose the right one under **Workspace** and press **Connect Saved**.
+
 ### Remote control
 
 1. In QLab, give the passcode **control** access.
@@ -352,6 +379,7 @@ src/paging.js             Backstage paging message
 src/network.js            LAN addresses and QR codes
 src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
 src/midi-out.js           MIDI pass-through: WebSocket from the MIDI page to a MIDI output port
+src/departments.js        Department logins, cue ownership and department actions
 src/rtp-midi.js           Built-in network MIDI (RTP-MIDI) session "QLab Connect" for iPhones etc.
 public/shared.js          Browser helpers: departments, standby, show clock, paging overlay
 public/                   Browser UI

@@ -7,6 +7,7 @@ import { resetRunningTracking, recordRunningCues } from "./show.js";
 import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
 const pending = new Map();
+let openWorkspaces = [];
 const notesCache = new Map();
 const staleNotes = new Set();
 const notesInFlight = new Set();
@@ -28,6 +29,7 @@ export async function connectToQlab({ host, passcode = "", workspaceId = "" }) {
   await openQlabConnection(host);
   const workspacesReply = await query(host, "/workspaces", [], 3500);
   const workspaces = asArray(workspacesReply.data);
+  openWorkspaces = workspaces.map(describeWorkspace);
   const workspace = pickWorkspace(workspaces, workspaceId);
 
   if (!workspace?.uniqueID) {
@@ -155,6 +157,45 @@ function clearTimers() {
   clearInterval(thumpTimer);
   pollTimer = null;
   thumpTimer = null;
+}
+
+function describeWorkspace(workspace) {
+  return {
+    id: workspace.uniqueID,
+    name: workspace.displayName || workspace.name || workspace.uniqueID
+  };
+}
+
+// What the app is actually receiving from QLab, for the admin page: open workspaces and
+// how many cues of each type each cue list holds.
+export async function qlabDiagnostics() {
+  if (state.connected) {
+    try {
+      const reply = await query(state.host, "/workspaces", [], 2500);
+      openWorkspaces = asArray(reply.data).map(describeWorkspace);
+    } catch {
+      // Keep the list from when we connected.
+    }
+  }
+  const lists = state.cues.filter((cue) => cue.depth === 0).map((list) => {
+    const types = {};
+    let count = 0;
+    const ids = new Set([list.uniqueID]);
+    for (const cue of state.cues) {
+      if (!ids.has(cue.parentId)) continue;
+      ids.add(cue.uniqueID);
+      count += 1;
+      types[cue.type || "Unknown"] = (types[cue.type || "Unknown"] || 0) + 1;
+    }
+    return { id: list.uniqueID, name: list.name || list.listName || "Cue list", type: list.type, count, types };
+  });
+  return {
+    connected: state.connected,
+    workspaceId: state.workspaceId,
+    workspaceName: state.workspaceName,
+    openWorkspaces,
+    lists
+  };
 }
 
 function pickWorkspace(workspaces, requestedId) {
@@ -369,15 +410,27 @@ async function refreshAllPlayheads() {
   applyStandby();
 }
 
-// Polled every refresh so the standby cue corrects itself even if an update message was missed.
+// Polled every refresh so standby cues correct themselves even if an update message was missed.
+// Every cue list is polled (departments each follow their own list); workspaces have only a few.
 async function refreshActivePlayhead() {
   if (!activeListId && cueLists().length) activeListId = cueLists()[0].uniqueID;
-  if (!activeListId) return;
-  const result = await queryPlayhead(activeListId);
-  if (result.ok) {
-    playheads.set(activeListId, normalizeCueId(result.cueId));
-    applyStandby();
-  }
+  const lists = cueLists().slice(0, 12);
+  const results = await Promise.all(lists.map((list) => queryPlayhead(list.uniqueID)));
+  lists.forEach((list, index) => {
+    if (results[index].ok) playheads.set(list.uniqueID, normalizeCueId(results[index].cueId));
+  });
+  applyStandby();
+}
+
+export function listPlayhead(listId) {
+  return playheads.get(listId) || "";
+}
+
+// Move one cue list's playhead to a cue (QLab 5 playheadId, QLab 4 playbackPositionId).
+export async function setPlayhead(listId, cueId) {
+  const field = playheadField || "playheadId";
+  await sendWorkspaceCommand(`/cue_id/${listId}/${field}`, [cueId]);
+  setListPlayhead(listId, cueId);
 }
 
 function setListPlayhead(listId, cueId) {
@@ -387,8 +440,10 @@ function setListPlayhead(listId, cueId) {
 
 function applyStandby() {
   const nextId = playheads.get(activeListId) || "";
-  if (nextId === state.standbyId) return;
+  const nextPlayheads = Object.fromEntries(playheads);
+  if (nextId === state.standbyId && JSON.stringify(nextPlayheads) === JSON.stringify(state.playheads)) return;
   state.standbyId = nextId;
+  state.playheads = nextPlayheads;
   refreshNotes();
   broadcastPatch();
 }
@@ -400,7 +455,11 @@ function normalizeCueId(cueId) {
 
 // Notes are fetched only for the cues screens actually show: standby and running.
 function refreshNotes() {
-  const wanted = new Set([state.standbyId, ...state.running.map((cue) => cue.uniqueID)].filter(Boolean));
+  const wanted = new Set([
+    state.standbyId,
+    ...Object.values(state.playheads || {}),
+    ...state.running.map((cue) => cue.uniqueID)
+  ].filter(Boolean));
   const notes = {};
   for (const id of wanted) {
     // Keep showing the old notes while a changed cue's notes are re-read.

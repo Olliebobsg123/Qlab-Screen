@@ -109,7 +109,7 @@ setInterval(renderClockAndPage, 1000);
 
 deptSelect.innerHTML = departmentOptionsHtml(cueFilter);
 deptSelect.addEventListener("change", () => applyDepartment(deptSelect.value));
-if (cueFilter.active) document.querySelector(".hero-block .eyebrow").textContent = `QLab Screen · ${cueFilter.label}`;
+if (cueFilter.active) document.querySelector(".topbar-title .eyebrow").textContent = `Monitor · ${cueFilter.label}`;
 
 cueList.addEventListener("scroll", () => {
   if (autoScrolling) return;
