@@ -131,6 +131,7 @@ function normalizeDepartment(saved) {
     // Which cues belong to this department: cue lists (by unique ID), and/or cue colours and name prefixes.
     cueListIds: list(saved.cueListIds).slice(0, 20),
     cueColors: list(saved.cueColors).filter((color) => DEPARTMENT_COLORS.has(color)),
+    cueTypes: list(saved.cueTypes).slice(0, 40).map((type) => type.slice(0, 30)),
     namePrefixes: list(saved.namePrefixes).slice(0, 10).map((prefix) => prefix.slice(0, 20)),
     passwordHash: String(saved.passwordHash || ""),
     passwordSalt: String(saved.passwordSalt || "")

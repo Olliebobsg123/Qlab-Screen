@@ -185,13 +185,19 @@ const deptEditor = document.querySelector("#deptEditor");
 const deptMessage = document.querySelector("#deptMessage");
 const DEPT_COLORS = ["blue", "red", "orange", "yellow", "green", "purple", "magenta", "gray"];
 const CUE_COLORS = ["red", "orange", "yellow", "green", "blue", "purple", "magenta", "gray"];
+// Every QLab cue type (QLab 5, plus QLab 4's OSC cue). Types in the current show are listed first with counts.
+const QLAB_CUE_TYPES = [
+  "Audio", "Mic", "Video", "Camera", "Text", "Light", "Fade", "Network", "OSC", "MIDI", "MIDI File", "Timecode",
+  "Group", "Start", "Stop", "Pause", "Load", "Reset", "Devamp", "GoTo", "Target", "Arm", "Disarm", "Wait", "Memo", "Script"
+];
+let typeCounts = {};
 let departments = [];
 let cueListOptions = [];
 
 loadDepartments();
 document.querySelector("#addDeptButton").addEventListener("click", () => {
   readDepartmentEdits();
-  departments.push({ id: `dept${Date.now().toString(36)}`, name: "", color: DEPT_COLORS[departments.length % DEPT_COLORS.length], cueListIds: [], cueColors: [], namePrefixes: [], hasPassword: false, isNew: true });
+  departments.push({ id: `dept${Date.now().toString(36)}`, name: "", color: DEPT_COLORS[departments.length % DEPT_COLORS.length], cueListIds: [], cueTypes: [], cueColors: [], namePrefixes: [], hasPassword: false, isNew: true });
   renderDepartments();
   deptEditor.querySelector(".dept-card:last-child input[name=name]")?.focus();
 });
@@ -210,6 +216,7 @@ async function loadDepartments() {
   const data = await fetch("/api/admin/departments", { cache: "no-store" }).then((response) => response.json());
   departments = data.departments;
   cueListOptions = data.cueLists;
+  typeCounts = data.typeCounts || {};
   renderDepartments();
 }
 
@@ -238,7 +245,16 @@ function renderDepartments() {
       </div>
       <div class="dept-card-row">
         <fieldset class="chip-set">
-          <legend>Cue lists</legend>
+          <legend>Cue types <span class="quiet">(numbers = how many are in this show)</span></legend>
+          ${cueTypeOptions(department).map((type) => `
+            <label class="chip-check ${typeCounts[type] ? "" : "chip-unused"}"><input type="checkbox" name="cueType" value="${escapeText(type)}" ${(department.cueTypes || []).includes(type) ? "checked" : ""}><span>${escapeText(type)}${typeCounts[type] ? ` <b>${typeCounts[type]}</b>` : ""}</span></label>`).join("")}
+        </fieldset>
+      </div>
+      <details class="dept-more" ${department.cueListIds.length || department.cueColors.length || department.namePrefixes.length ? "open" : ""}>
+      <summary>More ways to choose cues: cue lists, colours, name prefixes</summary>
+      <div class="dept-card-row">
+        <fieldset class="chip-set">
+          <legend>Cue lists <span class="quiet">(optional: whole lists, or limit the types above to these lists)</span></legend>
           ${cueListOptions.length
             ? cueListOptions.map((list) => `
               <label class="chip-check"><input type="checkbox" name="list" value="${escapeText(list.id)}" ${department.cueListIds.includes(list.id) ? "checked" : ""}><span>${escapeText(list.name)}</span></label>`).join("")
@@ -258,6 +274,7 @@ function renderDepartments() {
           <input name="prefixes" value="${escapeText(department.namePrefixes.join(", "))}" placeholder="e.g. LX, LQ">
         </label>
       </div>
+      </details>
       <div class="dept-card-actions">
         ${department.isNew ? "" : `<a class="tool-button" href="/dept.html?dept=${encodeURIComponent(department.id)}" target="_blank" rel="noopener">Open as admin</a>`}
         <button type="button" class="danger-outline small-button" data-remove-dept="${escapeText(department.id)}">Remove</button>
@@ -275,6 +292,7 @@ function readDepartmentEdits() {
     department.color = card.querySelector("[name=color]").value;
     department.cueListIds = Array.from(card.querySelectorAll("[name=list]:checked")).map((input) => input.value);
     department.cueColors = Array.from(card.querySelectorAll("[name=cueColor]:checked")).map((input) => input.value);
+    department.cueTypes = Array.from(card.querySelectorAll("[name=cueType]:checked")).map((input) => input.value);
     department.namePrefixes = card.querySelector("[name=prefixes]").value.split(",").map((value) => value.trim()).filter(Boolean);
     const password = card.querySelector("[name=password]").value;
     if (password) passwords[department.id] = password;
@@ -352,4 +370,100 @@ async function loadQlabInfo() {
     <div class="qlab-lists">${lists || '<p class="quiet">No cue lists.</p>'}</div>
     ${others.length ? `<p class="notice">Other workspaces are open in QLab too: ${others.map((workspace) => `<strong>${escapeText(workspace.name)}</strong>`).join(", ")}.
       The app only shows one workspace. If cues are missing, pick the right one in <em>Workspace</em> above and press <em>Connect Saved</em>.</p>` : ""}`;
+}
+
+// --- Tabs (the URL hash picks the tab, e.g. /admin.html#departments) ---
+
+const adminTabs = Array.from(document.querySelectorAll("[data-tab]"));
+function showAdminTab(name) {
+  const target = adminTabs.some((tab) => tab.dataset.tab === name) ? name : "qlab";
+  for (const tab of adminTabs) {
+    const selected = tab.dataset.tab === target;
+    tab.setAttribute("aria-selected", String(selected));
+    document.querySelector(`#tab-${tab.dataset.tab}`).hidden = !selected;
+  }
+}
+for (const tab of adminTabs) {
+  tab.addEventListener("click", () => {
+    history.replaceState(null, "", `#${tab.dataset.tab}`);
+    showAdminTab(tab.dataset.tab);
+  });
+}
+window.addEventListener("hashchange", () => showAdminTab(location.hash.slice(1)));
+showAdminTab(location.hash.slice(1));
+
+// --- Backup and restore ---
+
+const restoreFile = document.querySelector("#restoreFile");
+const restoreButton = document.querySelector("#restoreButton");
+const restorePreview = document.querySelector("#restorePreview");
+const backupMessage = document.querySelector("#backupMessage");
+let pendingRestore = null;
+
+document.querySelector("#backupDownload").addEventListener("click", () => {
+  const secrets = document.querySelector("#backupSecrets").checked ? "1" : "0";
+  try {
+    localStorage.setItem("qlab-last-backup", new Date().toISOString());
+  } catch {
+    // Only used for the Start page checklist.
+  }
+  window.location.href = `/api/admin/backup?secrets=${secrets}`;
+});
+
+restoreFile.addEventListener("change", async () => {
+  pendingRestore = null;
+  restoreButton.disabled = true;
+  restorePreview.hidden = true;
+  backupMessage.textContent = "";
+  const file = restoreFile.files[0];
+  if (!file) return;
+  try {
+    const backup = JSON.parse(await file.text());
+    if (backup.format !== "qlab-connect-setup") throw new Error("This isn't a QLab Connect setup file.");
+    pendingRestore = backup;
+    const setup = backup.setup || {};
+    const departmentsInFile = setup.departments || [];
+    restorePreview.innerHTML = `
+      <strong>${escapeText(file.name)}</strong>
+      <span>Saved ${escapeText(new Date(backup.exportedAt).toLocaleString())}${backup.includesSecrets ? " · includes passwords" : " · no passwords (current ones are kept)"}</span>
+      <span>QLab: ${escapeText(setup.qlab?.host || "not set")}${setup.qlab?.workspaceName ? ` · ${escapeText(setup.qlab.workspaceName)}` : ""}</span>
+      <span>${departmentsInFile.length} department${departmentsInFile.length === 1 ? "" : "s"}${departmentsInFile.length ? `: ${departmentsInFile.map((department) => escapeText(department.name)).join(", ")}` : ""}</span>
+      <span>Control ${setup.control?.enabled ? "on" : "off"} · ${(setup.control?.midiMappings || []).length} MIDI mappings</span>`;
+    restorePreview.hidden = false;
+    restoreButton.disabled = false;
+  } catch (error) {
+    backupMessage.textContent = error instanceof SyntaxError ? "That file couldn't be read." : error.message;
+  }
+});
+
+restoreButton.addEventListener("click", async () => {
+  if (!pendingRestore) return;
+  if (!window.confirm("Replace the current setup with the one in this file?")) return;
+  restoreButton.disabled = true;
+  try {
+    const response = await fetch("/api/admin/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pendingRestore)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load the setup.");
+    backupMessage.textContent = data.restartRequired
+      ? "Setup loaded. Restart the app to apply the changed ports or admin login."
+      : "Setup loaded.";
+    loadSettings();
+    loadControl();
+    loadDepartments();
+  } catch (error) {
+    backupMessage.textContent = error.message;
+    restoreButton.disabled = false;
+  }
+});
+
+function cueTypeOptions(department) {
+  const inShow = Object.keys(typeCounts).sort((a, b) => typeCounts[b] - typeCounts[a]);
+  const all = [...inShow, ...QLAB_CUE_TYPES.filter((type) => !inShow.includes(type))];
+  // Keep any saved type that isn't in either list (e.g. from a newer QLab).
+  for (const type of department.cueTypes || []) if (!all.includes(type)) all.push(type);
+  return all;
 }

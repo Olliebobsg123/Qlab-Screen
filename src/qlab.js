@@ -8,6 +8,12 @@ import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
 const pending = new Map();
 let openWorkspaces = [];
+const extraNoteIds = [];
+
+// Lets other modules (departments) ask for notes on the cues they show.
+export function registerNoteIds(provider) {
+  extraNoteIds.push(provider);
+}
 const notesCache = new Map();
 const staleNotes = new Set();
 const notesInFlight = new Set();
@@ -456,6 +462,7 @@ function normalizeCueId(cueId) {
 // Notes are fetched only for the cues screens actually show: standby and running.
 function refreshNotes() {
   const wanted = new Set([
+    ...extraNoteIds.flatMap((provider) => provider()),
     state.standbyId,
     ...Object.values(state.playheads || {}),
     ...state.running.map((cue) => cue.uniqueID)

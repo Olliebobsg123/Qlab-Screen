@@ -71,13 +71,40 @@ export function filterRunning(running, cueMap, filter) {
   });
 }
 
-export function departmentOptionsHtml(filter) {
-  const options = [["", "All departments"], ...Object.entries(DEPARTMENTS).map(([id, dept]) => [id, dept.label])];
-  if (filter.active && !filter.dept) options.push(["__custom", "Custom filter"]);
+export function departmentOptionsHtml(filter, configured = []) {
   const selected = filter.dept || (filter.active ? "__custom" : "");
-  return options.map(([id, label]) =>
-    `<option value="${escapeHtml(id)}" ${id === selected ? "selected" : ""}>${escapeHtml(label)}</option>`
-  ).join("");
+  const option = ([id, label]) => `<option value="${escapeHtml(id)}" ${id === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+  let html = option(["", "All cues"]);
+  if (configured.length) {
+    html += `<optgroup label="Departments">${configured.map((department) => option([department.id, department.name])).join("")}</optgroup>`;
+  }
+  html += `<optgroup label="Quick filters by cue type">${Object.entries(DEPARTMENTS).map(([id, dept]) => option([id, dept.label])).join("")}</optgroup>`;
+  if (filter.active && !filter.dept) html += option(["__custom", "Custom filter"]);
+  return html;
+}
+
+// Departments set up in Admin, with the cues each owns (same rules as their control pages).
+export async function loadConfiguredDepartments() {
+  try {
+    const data = await fetch("/api/departments/cues", { cache: "no-store" }).then((response) => response.json());
+    return data.departments || [];
+  } catch {
+    return [];
+  }
+}
+
+// A filter for one configured department, or null if ?dept= isn't one of them.
+export function configuredDepartmentFilter(configured, searchParams = params) {
+  const id = String(searchParams.get("dept") || "");
+  const department = configured.find((entry) => entry.id === id);
+  if (!department) return null;
+  const ids = new Set(department.cueIds);
+  return {
+    active: true,
+    dept: department.id,
+    label: department.name,
+    matches: (cue) => Boolean(cue && ids.has(cue.uniqueID))
+  };
 }
 
 export function applyDepartment(dept) {

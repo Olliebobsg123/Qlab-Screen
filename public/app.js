@@ -1,6 +1,8 @@
 import {
   applyDepartment,
+  configuredDepartmentFilter,
   departmentOptionsHtml,
+  loadConfiguredDepartments,
   endingClass,
   filterCueList,
   filterRunning,
@@ -44,7 +46,7 @@ const standbyName = document.querySelector("#standbyName");
 const standbyNotes = document.querySelector("#standbyNotes");
 const mobileStandby = document.querySelector("#mobileStandby");
 const mobileStandbyNotes = document.querySelector("#mobileStandbyNotes");
-const cueFilter = readCueFilter();
+let cueFilter = readCueFilter();
 const VIEWER_PAGE = "monitor";
 const VIEWER_CLIENT_ID_KEY = "qlab-screen-client-id";
 
@@ -109,7 +111,24 @@ setInterval(renderClockAndPage, 1000);
 
 deptSelect.innerHTML = departmentOptionsHtml(cueFilter);
 deptSelect.addEventListener("change", () => applyDepartment(deptSelect.value));
-if (cueFilter.active) document.querySelector(".topbar-title .eyebrow").textContent = `Monitor · ${cueFilter.label}`;
+setupConfiguredDepartments();
+
+// Departments from Admin replace the quick filter when ?dept= is one of them; their cue lists
+// are re-read regularly so edits in QLab or Admin show up.
+async function setupConfiguredDepartments() {
+  const configured = await loadConfiguredDepartments();
+  const filter = configuredDepartmentFilter(configured);
+  if (filter) cueFilter = filter;
+  const optionsHtml = departmentOptionsHtml(cueFilter, configured);
+  if (optionsHtml !== deptSelect.dataset.rendered && document.activeElement !== deptSelect) {
+    deptSelect.innerHTML = optionsHtml;
+    deptSelect.dataset.rendered = optionsHtml;
+  }
+  if (cueFilter.active) document.querySelector(".topbar-title .eyebrow").textContent = `Monitor · ${cueFilter.label}`;
+  lastCueVersion = -1;
+  render(currentState);
+  if (configured.length) setTimeout(setupConfiguredDepartments, 15000);
+}
 
 cueList.addEventListener("scroll", () => {
   if (autoScrolling) return;

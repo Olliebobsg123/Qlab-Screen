@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import { hasAdminAuth, isAdminPath, requestAdminAuth } from "./auth.js";
+import { exportSetup, importSetup } from "./backup.js";
 import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, HTTPS_PORT, QLAB_TCP_PORT, SETTINGS_PATH } from "./config.js";
 import { hasControlAuth, listControlActions, runControlAction } from "./control.js";
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
@@ -8,6 +9,7 @@ import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
 import {
   adminDepartmentList,
+  departmentCueMap,
   departmentView,
   login,
   loginDepartments,
@@ -110,6 +112,11 @@ async function routeRequest(request, response) {
     return sendJson(response, { departments: loginDepartments() });
   }
 
+  // Which cues each department owns, for the monitor/TV department filter (read-only).
+  if (url.pathname === "/api/departments/cues" && request.method === "GET") {
+    return sendJson(response, { departments: departmentCueMap() });
+  }
+
   if (url.pathname === "/api/login" && request.method === "POST") {
     const body = await readBody(request);
     return sendJson(response, { ok: true, department: login(request, response, body) });
@@ -134,14 +141,41 @@ async function routeRequest(request, response) {
     return sendJson(response, { error: "Not found." }, 404);
   }
 
+  if (url.pathname === "/api/admin/backup" && request.method === "GET") {
+    const date = new Date().toISOString().slice(0, 10);
+    const name = (state.workspaceName || "setup").replace(/\.qlab\d*$/i, "").replace(/[^\w -]+/g, "").trim() || "setup";
+    response.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${name} ${date}.qlabconnect"`,
+      "Cache-Control": "no-store"
+    });
+    return response.end(`${JSON.stringify(exportSetup({ includeSecrets: url.searchParams.get("secrets") === "1" }), null, 2)}\n`);
+  }
+
+  if (url.pathname === "/api/admin/restore" && request.method === "POST") {
+    const { saved, restartRequired } = await importSetup(await readBody(request));
+    if (saved.autoConnect && saved.host) {
+      connectToQlab(saved).catch((error) => {
+        state.lastError = error.message;
+      });
+    }
+    broadcastPatch();
+    return sendJson(response, { ok: true, restartRequired });
+  }
+
   if (url.pathname === "/api/admin/qlab-info" && request.method === "GET") {
     return sendJson(response, await qlabDiagnostics());
   }
 
   if (url.pathname === "/api/admin/departments" && request.method === "GET") {
+    const typeCounts = {};
+    for (const cue of state.cues) {
+      if (cue.depth > 0 && cue.type) typeCounts[cue.type] = (typeCounts[cue.type] || 0) + 1;
+    }
     return sendJson(response, {
       departments: adminDepartmentList(),
-      cueLists: state.cues.filter((cue) => cue.depth === 0).map((cue) => ({ id: cue.uniqueID, name: cue.name || cue.listName || "Cue list" }))
+      cueLists: state.cues.filter((cue) => cue.depth === 0).map((cue) => ({ id: cue.uniqueID, name: cue.name || cue.listName || "Cue list" })),
+      typeCounts
     });
   }
 

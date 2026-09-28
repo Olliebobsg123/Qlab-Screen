@@ -76,8 +76,15 @@ export function publicStatePatch() {
   };
 }
 
+// Other modules can add fields to the live state without state.js importing them.
+const metaProviders = [];
+export function registerMetaProvider(provider) {
+  metaProviders.push(provider);
+}
+
 export function publicStateMeta() {
   return {
+    ...Object.assign({}, ...metaProviders.map((provider) => provider())),
     appVersion: APP_VERSION,
     connected: state.connected,
     host: state.host,

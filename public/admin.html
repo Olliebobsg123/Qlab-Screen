@@ -13,24 +13,23 @@
           <span class="eyebrow">Settings</span>
           <h1>Admin</h1>
         </div>
-        <nav class="topnav" aria-label="Pages">
-          <a href="/">Monitor</a>
-          <a href="/dashboard.html">TV</a>
-          <a href="/login.html">Departments</a>
-          <a href="/control.html">Control</a>
-          <a href="/midi.html">MIDI</a>
-          <a href="/report.html">Report</a>
-          <a href="/admin.html" aria-current="page">Admin</a>
-        </nav>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
       </header>
 
-      <div class="admin-links">
-        <a class="tool-button" href="/viewers.html">Live viewers</a>
-        <a class="tool-button" href="/meter-source.html">Audio meter source</a>
-        <a class="tool-button" href="/login.html">Department login</a>
-      </div>
 
-      <section class="panel admin-panel">
+      <nav class="tabs" role="tablist" aria-label="Admin sections">
+        <button type="button" role="tab" class="tab" data-tab="qlab">QLab</button>
+        <button type="button" role="tab" class="tab" data-tab="departments">Departments</button>
+        <button type="button" role="tab" class="tab" data-tab="control">Control</button>
+        <button type="button" role="tab" class="tab" data-tab="share">Share</button>
+        <button type="button" role="tab" class="tab" data-tab="backup">Backup</button>
+      </nav>
+
+      <section id="tab-qlab" class="panel admin-panel tab-panel" role="tabpanel">
+        <div class="panel-head bare">
+          <h2>QLab connection</h2>
+          <span>The Mac running QLab, and which workspace to show</span>
+        </div>
         <form id="adminForm" class="admin-form">
           <label>
             <span>QLab host</span>
@@ -59,15 +58,16 @@
         <div id="qlabInfo" class="qlab-info" aria-live="polite"></div>
       </section>
 
-      <section class="panel admin-panel">
+      <section id="tab-departments" class="panel admin-panel tab-panel" role="tabpanel" hidden>
         <div class="panel-head bare">
           <h2>Departments</h2>
           <span>Each department logs in at <a href="/login.html">/login.html</a> and controls only its own cues</span>
         </div>
         <p class="help-text quiet">
-          Give each department its own cue list in QLab (for example “Lighting”) and pick it here. You can also match cues
-          by colour or by how their name or number starts (e.g. <code>LX</code>). If you choose a cue list and a colour/prefix,
-          only cues in that list that also match count. Departments need QLab control switched on (below).
+          Choose what each department owns: <strong>cue types</strong> (e.g. Audio + Mic → Sound, Video + Camera + Text → Video, Light → Lighting),
+          and/or whole <strong>cue lists</strong>, cue colours or name prefixes such as <code>LX</code>. A cue belongs to a department if it
+          matches any of its types, colours or prefixes; if you also tick cue lists, only cues in those lists count.
+          Departments need QLab control switched on (Control tab).
         </p>
         <div id="deptEditor" class="dept-editor">Loading…</div>
         <div class="form-actions">
@@ -77,7 +77,7 @@
         <p id="deptMessage" class="form-message" aria-live="polite"></p>
       </section>
 
-      <section class="panel admin-panel">
+      <section id="tab-control" class="panel admin-panel tab-panel" role="tabpanel" hidden>
         <div class="panel-head bare">
           <h2>QLab control</h2>
           <span id="controlState">Off</span>
@@ -102,14 +102,48 @@
         <p id="controlMessage" class="form-message" aria-live="polite"></p>
       </section>
 
-      <section class="panel admin-panel">
+      <section id="tab-share" class="panel admin-panel tab-panel" role="tabpanel" hidden>
         <div class="panel-head bare">
           <h2>Join from other devices</h2>
           <span>Scan with a phone or tablet on the same network</span>
         </div>
         <div id="networkList" class="network-list">Loading…</div>
+        <h3 class="subhead">More tools</h3>
+        <div class="admin-links">
+        <a class="tool-button" href="/viewers.html">Live viewers</a>
+        <a class="tool-button" href="/meter-source.html">Audio meter source</a>
+        <a class="tool-button" href="/login.html">Department login</a>
+        </div>
+      </section>
+
+
+      <section id="tab-backup" class="panel admin-panel tab-panel" role="tabpanel" hidden>
+        <div class="panel-head bare">
+          <h2>Backup and restore</h2>
+          <span>Save this whole setup as a file, and load it back later or on another computer</span>
+        </div>
+        <p class="help-text quiet">
+          The file holds the QLab connection, departments, cue control, MIDI mappings and outputs, and network MIDI devices.
+          It's a <code>.qlabconnect</code> file (plain JSON inside), so you can keep one per show.
+        </p>
+        <div class="backup-row">
+          <label class="toggle-row">
+            <input id="backupSecrets" type="checkbox" checked>
+            <span>Include passwords, the QLab passcode and the control token (keep the file private)</span>
+          </label>
+          <button id="backupDownload" type="button">Download setup file</button>
+        </div>
+        <h3 class="subhead">Restore</h3>
+        <div class="backup-row">
+          <input id="restoreFile" type="file" accept=".qlabconnect,.json,application/json">
+          <button id="restoreButton" type="button" class="secondary" disabled>Load setup file</button>
+        </div>
+        <div id="restorePreview" class="restore-preview" hidden></div>
+        <p id="backupMessage" class="form-message" aria-live="polite"></p>
       </section>
     </main>
+
+    <script src="/nav.js" defer></script>
 
     <script src="/admin.js" type="module"></script>
   </body>

@@ -1,10 +1,10 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { hasAdminAuth } from "./auth.js";
 import { getClientIp } from "./http-utils.js";
-import { listPlayhead, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
+import { listPlayhead, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
 import { controlSettings, getDepartments, saveDepartments, sessionSecret } from "./settings.js";
 import { logEvent } from "./show.js";
-import { state } from "./state.js";
+import { registerMetaProvider, state } from "./state.js";
 
 // Departments (lighting, video, stage...) log in with their own password and can control only
 // their own cues: the cue lists assigned to them and/or cues with their colours or name prefixes.
@@ -13,6 +13,14 @@ const SESSION_DAYS = 14;
 const LOGIN_WINDOW_MS = 60_000;
 const LOGIN_MAX_FAILURES = 8;
 const loginFailures = new Map();
+// Departments that own cues by type/colour/prefix step through their own sequence: this is the
+// cue each one will fire on its next GO.
+const cursors = new Map();
+const END = "__end__";
+
+// Every screen gets each department's next cue; department pages show their own.
+registerMetaProvider(() => ({ deptNext: departmentNextIds() }));
+registerNoteIds(() => Object.values(departmentNextIds()));
 
 // --- Admin management ---
 
@@ -99,6 +107,15 @@ export function requestDepartment(request, url) {
 
 // --- Which cues a department owns ---
 
+export function departmentCueMap() {
+  return getDepartments().map((department) => ({
+    id: department.id,
+    name: department.name,
+    color: department.color,
+    cueIds: departmentCueIds(department)
+  }));
+}
+
 export function departmentCueIds(department) {
   const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
   return state.cues.filter((cue) => ownsCue(department, cue, cueMap)).map((cue) => cue.uniqueID);
@@ -106,13 +123,16 @@ export function departmentCueIds(department) {
 
 function ownsCue(department, cue, cueMap) {
   if (!cue?.uniqueID || cue.depth === 0) return false;
+  if (cue.type === "Cue List" || cue.type === "Cue Cart") return false;
   const hasLists = department.cueListIds.length > 0;
-  const hasFilters = department.cueColors.length > 0 || department.namePrefixes.length > 0;
+  const hasFilters = hasCueFilters(department);
   if (!hasLists && !hasFilters) return false;
 
   if (hasLists && !department.cueListIds.includes(rootListId(cue, cueMap))) return false;
   if (!hasFilters) return true;
 
+  // Any of type, colour or name prefix is enough (e.g. Audio and Mic cues both go to Sound).
+  const typeMatch = department.cueTypes.includes(cue.type);
   const colorMatch = department.cueColors.includes(String(cue.colorName || "none").toLowerCase());
   const name = `${cue.number || ""} ${cue.name || ""}`.trim().toLowerCase();
   const prefixMatch = department.namePrefixes.some((prefix) => {
@@ -120,7 +140,67 @@ function ownsCue(department, cue, cueMap) {
     return name.startsWith(value) || String(cue.name || "").toLowerCase().startsWith(value) ||
       String(cue.number || "").toLowerCase().startsWith(value);
   });
-  return colorMatch || prefixMatch;
+  return typeMatch || colorMatch || prefixMatch;
+}
+
+function hasCueFilters(department) {
+  return department.cueTypes.length > 0 || department.cueColors.length > 0 || department.namePrefixes.length > 0;
+}
+
+// "list": the department owns whole cue lists, so GO uses QLab's own playhead for them.
+// "sequence": it owns cues by type/colour/prefix, so GO steps through its own cues in show order.
+function departmentMode(department) {
+  return department.cueListIds.length && !hasCueFilters(department) ? "list" : "sequence";
+}
+
+// The department's cues in show order, leaving out cues inside a group it also owns
+// (firing the group fires them).
+function departmentSequence(department) {
+  const owned = new Set(departmentCueIds(department));
+  const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
+  return state.cues.filter((cue) => {
+    if (!owned.has(cue.uniqueID)) return false;
+    let parent = cueMap.get(cue.parentId);
+    while (parent) {
+      if (owned.has(parent.uniqueID)) return false;
+      parent = cueMap.get(parent.parentId);
+    }
+    return true;
+  });
+}
+
+// The next cue for a sequence department. It follows the show: if the main playhead has moved
+// past the department's next cue, it jumps forward to the first of its cues from the playhead on.
+function sequenceNext(department, sequence = departmentSequence(department)) {
+  if (!sequence.length) return "";
+  const order = new Map(state.cues.map((cue, index) => [cue.uniqueID, index]));
+  const playheadIndex = order.get(state.standbyId) ?? -1;
+  const fromPlayhead = sequence.find((cue) => order.get(cue.uniqueID) >= playheadIndex)?.uniqueID || "";
+
+  const cursor = cursors.get(department.id);
+  if (cursor?.cueId === END) {
+    // Fired its last cue: nothing next until the show's playhead moves on.
+    return cursor.playheadIndex !== playheadIndex && fromPlayhead ? fromPlayhead : "";
+  }
+  if (!cursor || !sequence.some((cue) => cue.uniqueID === cursor.cueId)) return fromPlayhead || sequence[0].uniqueID;
+  // Only follow the show forwards, and only when the playhead actually moved since the cursor was set.
+  if (cursor.playheadIndex !== playheadIndex && order.get(cursor.cueId) < playheadIndex && fromPlayhead) {
+    return fromPlayhead;
+  }
+  return cursor.cueId;
+}
+
+function setCursor(department, cueId) {
+  const order = new Map(state.cues.map((cue, index) => [cue.uniqueID, index]));
+  cursors.set(department.id, { cueId, playheadIndex: order.get(state.standbyId) ?? -1 });
+}
+
+function departmentNextIds() {
+  const result = {};
+  for (const department of getDepartments()) {
+    if (departmentMode(department) === "sequence") result[department.id] = sequenceNext(department);
+  }
+  return result;
 }
 
 function rootListId(cue, cueMap) {
@@ -133,10 +213,12 @@ export function departmentView(department) {
   const lists = state.cues
     .filter((cue) => cue.depth === 0 && department.cueListIds.includes(cue.uniqueID))
     .map((list) => ({ id: list.uniqueID, name: list.name || list.listName || "Cue list", playheadId: listPlayhead(list.uniqueID) }));
+  const mode = departmentMode(department);
   return {
     department: publicDepartment(department),
+    mode,
     cueIds: departmentCueIds(department),
-    lists
+    lists: mode === "list" ? lists : []
   };
 }
 
@@ -160,6 +242,33 @@ export async function runDepartmentAction(department, { action, cueId, listId })
   };
 
   let detail = "";
+  const sequenceMode = departmentMode(department) === "sequence";
+  if (sequenceMode && (action === "go" || action === "next" || action === "previous")) {
+    const sequence = departmentSequence(department);
+    const current = sequenceNext(department, sequence);
+    const index = sequence.findIndex((cue) => cue.uniqueID === current);
+    if (index === -1) {
+      if (action === "previous" && sequence.length) {
+        setCursor(department, sequence[sequence.length - 1].uniqueID);
+        return { ok: true };
+      }
+      throw httpError(409, sequence.length ? "You're at the end of your cues." : "This department has no cues.");
+    }
+    if (action === "go") {
+      detail = `GO ${cueLabel(current)}`;
+      await sendWorkspaceCommand(`/cue_id/${current}/start`);
+      if (index < sequence.length - 1) setCursor(department, sequence[index + 1].uniqueID);
+      else setCursor(department, END);
+    } else {
+      const step = action === "next" ? 1 : -1;
+      const target = sequence[Math.max(0, Math.min(sequence.length - 1, index + step))];
+      detail = `${action === "next" ? "Next" : "Previous"}: ${cueLabel(target.uniqueID)}`;
+      setCursor(department, target.uniqueID);
+    }
+    logEvent("department", `${department.name}: ${detail}`);
+    return { ok: true };
+  }
+
   if (action === "go") {
     const id = requireList();
     detail = `GO${listPlayhead(id) ? ` ${cueLabel(listPlayhead(id))}` : ""}`;
@@ -172,6 +281,10 @@ export async function runDepartmentAction(department, { action, cueId, listId })
     const id = requireCue();
     detail = `Stop ${cueLabel(id)}`;
     await sendWorkspaceCommand(`/cue_id/${id}/stop`);
+  } else if (action === "standby" && sequenceMode) {
+    const id = requireCue();
+    detail = `Standby ${cueLabel(id)}`;
+    setCursor(department, id);
   } else if (action === "standby") {
     const id = requireCue();
     const list = rootListId(cueMap.get(id), cueMap);
@@ -226,6 +339,7 @@ function publicDepartment(department) {
     color: department.color,
     cueListIds: department.cueListIds,
     cueColors: department.cueColors,
+    cueTypes: department.cueTypes,
     namePrefixes: department.namePrefixes
   };
 }

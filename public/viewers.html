@@ -13,15 +13,7 @@
           <span class="eyebrow">Admin</span>
           <h1>Live viewers</h1>
         </div>
-        <nav class="topnav" aria-label="Pages">
-          <a href="/">Monitor</a>
-          <a href="/dashboard.html">TV</a>
-          <a href="/login.html">Departments</a>
-          <a href="/control.html">Control</a>
-          <a href="/midi.html">MIDI</a>
-          <a href="/report.html">Report</a>
-          <a href="/admin.html">Admin</a>
-        </nav>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
       </header>
 
       <section class="panel admin-panel">
@@ -32,6 +24,8 @@
         <div id="viewerList" class="viewer-list empty">No live viewers.</div>
       </section>
     </main>
+
+    <script src="/nav.js" defer></script>
 
     <script src="/viewers.js" type="module"></script>
   </body>

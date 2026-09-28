@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QLab Connect</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell start-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">QLab Connect</span>
+          <h1>Start here</h1>
+        </div>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
+      </header>
+
+      <section class="panel start-setup">
+        <h2>Setting up a show</h2>
+        <ol class="checklist">
+          <li id="stepQlab"><span class="check"></span><div><strong>Connect to QLab</strong><span>Admin → QLab: enter the QLab Mac's address and passcode, and pick the workspace.</span></div><a href="/admin.html#qlab" class="tool-button">Open</a></li>
+          <li id="stepControl"><span class="check"></span><div><strong>Allow cue control</strong><span>Admin → Control: switch on control so departments, the Control page and MIDI can fire cues.</span></div><a href="/admin.html#control" class="tool-button">Open</a></li>
+          <li id="stepDepartments"><span class="check"></span><div><strong>Add departments</strong><span>Admin → Departments: give each team a password and its cue list.</span></div><a href="/admin.html#departments" class="tool-button">Open</a></li>
+          <li id="stepBackup"><span class="check"></span><div><strong>Save your setup</strong><span>Admin → Backup: download a .qlabconnect file so you can restore everything later.</span></div><a href="/admin.html#backup" class="tool-button">Open</a></li>
+        </ol>
+      </section>
+
+      <section class="start-groups">
+        <div class="start-group">
+          <h2>Watch</h2>
+          <p class="quiet">For anyone. Read-only, no login.</p>
+          <a class="start-card" href="/"><strong>Monitor</strong><span>Full cue list, what's running and what's next. Filter by department.</span></a>
+          <a class="start-card" href="/dashboard.html"><strong>TV dashboard</strong><span>Big, simple view for backstage screens and relay TVs.</span></a>
+        </div>
+        <div class="start-group">
+          <h2>Run cues</h2>
+          <p class="quiet">For operators.</p>
+          <a class="start-card" href="/login.html"><strong>Departments</strong><span>Each team logs in with its password and fires only its own cues.</span></a>
+          <a class="start-card" href="/control.html"><strong>Control</strong><span>Stage manager: GO for the whole show, panic, show clock and backstage calls. Admin login.</span></a>
+          <a class="start-card" href="/midi.html"><strong>MIDI</strong><span>Play QLab's MIDI triggers from a keyboard, an iPhone or on-screen pads. Admin login.</span></a>
+        </div>
+        <div class="start-group">
+          <h2>Setup</h2>
+          <p class="quiet">For you. Admin login.</p>
+          <a class="start-card" href="/admin.html"><strong>Admin</strong><span>QLab connection, departments, control, sharing links and backups.</span></a>
+          <a class="start-card" href="/report.html"><strong>Show report</strong><span>Every cue fired with timings, running time and intervals. Download as CSV.</span></a>
+        </div>
+      </section>
+    </main>
+    <script src="/nav.js" defer></script>
+    <script src="/start.js" type="module"></script>
+  </body>
+</html>

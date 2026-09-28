@@ -15,15 +15,7 @@
           <span class="eyebrow">Stage manager control</span>
           <h1 id="controlWorkspace">Waiting for QLab</h1>
         </div>
-        <nav class="topnav" aria-label="Pages">
-          <a href="/">Monitor</a>
-          <a href="/dashboard.html">TV</a>
-          <a href="/login.html">Departments</a>
-          <a href="/control.html" aria-current="page">Control</a>
-          <a href="/midi.html">MIDI</a>
-          <a href="/report.html">Report</a>
-          <a href="/admin.html">Admin</a>
-        </nav>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
       </header>
 
       <p id="controlDisabledNotice" class="notice" hidden>
@@ -158,6 +150,8 @@
       </section>
       <p id="controlMessage" class="toast" aria-live="polite"></p>
     </main>
+
+    <script src="/nav.js" defer></script>
 
     <script src="/control.js" type="module"></script>
   </body>

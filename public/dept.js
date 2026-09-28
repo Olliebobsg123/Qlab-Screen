@@ -88,7 +88,9 @@ function render() {
   const running = (state.running || []).filter((cue) => owned.has(cue.uniqueID));
   const runningIds = new Set(running.map((cue) => cue.uniqueID));
   const playheads = state.playheads || {};
-  const standbyIds = new Set(view.lists.map((list) => playheads[list.id]).filter(Boolean));
+  const sequenceMode = view.mode === "sequence";
+  const sequenceNextId = state.deptNext?.[view.department.id] || "";
+  const standbyIds = new Set(sequenceMode ? [sequenceNextId].filter(Boolean) : view.lists.map((list) => playheads[list.id]).filter(Boolean));
 
   const qlab = $("#deptQlab");
   qlab.dataset.state = state.connected ? "on" : "off";
@@ -102,9 +104,12 @@ function render() {
   notice.textContent = problems.join(" ");
   notice.hidden = !problems.length;
 
-  // One GO card per cue list the department owns.
-  $("#goCards").innerHTML = view.lists.map((list) => {
-    const standby = cueMap.get(playheads[list.id]);
+  // One GO card per cue list the department owns, or one for its own sequence of cues.
+  const goSources = sequenceMode
+    ? (view.cueIds.length ? [{ id: "", name: "My cues", standbyId: sequenceNextId }] : [])
+    : view.lists.map((list) => ({ ...list, standbyId: playheads[list.id] }));
+  $("#goCards").innerHTML = goSources.map((list) => {
+    const standby = cueMap.get(list.standbyId);
     const notes = getCueNotes(state, standby?.uniqueID);
     return `
       <div class="panel go-card">
@@ -112,7 +117,7 @@ function render() {
           <span class="eyebrow">${escapeHtml(list.name)} · next</span>
           <div class="go-next">
             <strong class="go-number">${escapeHtml(standby?.number || "–")}</strong>
-            <strong class="go-name">${escapeHtml(standby ? cueName(standby) : "End of list")}</strong>
+            <strong class="go-name">${escapeHtml(standby ? cueName(standby) : "End of your cues")}</strong>
           </div>
           ${notes ? `<p class="notes-text">${escapeHtml(notes)}</p>` : ""}
         </div>
@@ -156,7 +161,7 @@ function render() {
     ? cues.map((cue) => {
       const isRunning = runningIds.has(cue.uniqueID);
       const isNext = standbyIds.has(cue.uniqueID);
-      const inOwnList = listIds.has(rootList(cue, cueMap));
+      const inOwnList = sequenceMode || listIds.has(rootList(cue, cueMap));
       const swatch = COLORS[String(cue.colorName || "").toLowerCase()];
       return `
         <div class="dept-cue ${isRunning ? "running" : ""} ${isNext ? "standby" : ""}" style="--depth:${Math.max(0, Number(cue.depth || 1) - 1)}">
@@ -221,10 +226,9 @@ function setupKeyboard() {
   document.addEventListener("keydown", (event) => {
     if (!toggle.checked || event.repeat || event.code !== "Space") return;
     if (event.target.closest("input, select, textarea, button")) return;
-    const firstList = view?.lists[0];
-    if (!firstList) return;
+    if (!view || (view.mode !== "sequence" && !view.lists[0])) return;
     event.preventDefault();
-    act({ action: "go", listId: firstList.id }, "GO");
+    act({ action: "go", listId: view.lists[0]?.id }, "GO");
   });
 }
 

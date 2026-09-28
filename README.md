@@ -148,24 +148,43 @@ On the control page, use a preset button or type a message. Choose which screens
 
 The QLab Mac (for example a Mac mini that also runs the show's audio) can serve every department. Each team logs in from its own phone, tablet or laptop and fires only its own cues.
 
-1. In QLab, give each department its own **cue list**, for example "Lighting" or "Video". You can also mark cues with a colour or name them with a prefix such as `LX`.
-2. In **Admin → Departments**, press **Add department** and fill in:
-   - a name, colour and password
-   - which cue lists it owns
-   - optionally, cue colours or name/number prefixes (with a cue list chosen, only cues in that list that also match count)
+1. Nothing special is needed in QLab. Departments can own cues by type. If you prefer, give a department its own cue list, or mark its cues with a colour or a prefix such as `LX`.
+2. In **Admin → Departments**, press **Add department** and fill in a name, colour and password. Then choose what it owns:
+   - **Cue types**, for example Audio + Mic for Sound, Video + Camera + Text for Video, Light for Lighting. Every QLab cue type is listed, and the ones in the current show are marked with counts.
+   - Optionally, under **More ways to choose cues**: whole cue lists, cue colours, or name/number prefixes such as `LX`.
+
+   A cue belongs to a department if it matches any of its types, colours or prefixes. If cue lists are also ticked, only cues in those lists count.
 3. Turn on **QLab control** in Admin. The QLab passcode needs control access.
 4. Each operator opens `http://<server-ip>:3030/login.html`, taps their department and enters the password.
 
 The department page shows:
 
-- a big **GO** for each of the department's cue lists, with the next cue and its notes
-- **Previous/Next** to move that list's playhead
+- a big **GO** with the department's next cue and its notes
+  - If the department owns whole cue lists, GO uses QLab's playhead for that list.
+  - Otherwise, GO steps through the department's own cues in show order. It follows the show: when the stage manager's playhead moves past the department's next cue, it jumps forward to catch up.
+- **Previous/Next** to choose the next cue
 - the department's running cues with **Stop** buttons, plus **Stop all my cues**
 - every cue the department owns, with **Start** and **Standby**
 
 The server checks every command. A department can't start, stop or move any cue it doesn't own, even through the API. Every department action is recorded in the show report.
 
 A login lasts 14 days, and changing a department's password signs everyone out of it. The admin can open any department's page from **Admin → Departments → Open as admin**. Backstage pages can target a single department.
+
+### Saving your setup
+
+In **Admin → Backup**, press **Download setup file** to save a `.qlabconnect` file (JSON inside). It holds:
+
+- the QLab connection
+- departments
+- cue control and the control token
+- MIDI mappings and outputs
+- network MIDI devices
+
+Keep one file per show. **Load setup file** restores it, with a preview first.
+
+If you untick "Include passwords", the file leaves out the passwords, the QLab passcode and the control token. When it's loaded, the current ones are kept.
+
+The monitor and TV department dropdown lists the departments set up in Admin, using the same cue ownership. The old quick filters by cue type are still there too.
 
 ### Missing cues?
 

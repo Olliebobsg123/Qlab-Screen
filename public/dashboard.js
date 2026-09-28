@@ -4,6 +4,8 @@ import {
   filterRunning,
   getCueNotes,
   getStandbyCue,
+  configuredDepartmentFilter,
+  loadConfiguredDepartments,
   readCueFilter,
   renderPageOverlay,
   showClockInfo,
@@ -32,7 +34,11 @@ const tvStandbyNumber = document.querySelector("#tvStandbyNumber");
 const tvStandbyName = document.querySelector("#tvStandbyName");
 const tvStandbyNotes = document.querySelector("#tvStandbyNotes");
 const tvMeters = document.querySelector("#tvMeters");
-const cueFilter = readCueFilter();
+let cueFilter = readCueFilter();
+loadConfiguredDepartments().then((configured) => {
+  cueFilter = configuredDepartmentFilter(configured) || cueFilter;
+  render();
+});
 const METER_STALE_MS = 2000;
 const VIEWER_PAGE = "dashboard";
 const VIEWER_CLIENT_ID_KEY = "qlab-screen-client-id";

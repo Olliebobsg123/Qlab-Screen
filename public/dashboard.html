@@ -10,6 +10,13 @@
   </head>
   <body class="tv-body server-offline">
     <main class="tv-shell">
+      <header class="topbar tv-topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">Watch</span>
+          <h1>TV dashboard</h1>
+        </div>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
+      </header>
       <section class="tv-status">
         <span id="tvConnection">Disconnected</span>
         <span id="tvWorkspace">-</span>
@@ -58,6 +65,7 @@
       </section>
     </main>
 
+    <script src="/nav.js" defer></script>
     <script src="/dashboard.js" type="module"></script>
   </body>
 </html>

@@ -13,15 +13,7 @@
           <span class="eyebrow">Audio meters</span>
           <h1>Meter source</h1>
         </div>
-        <nav class="topnav" aria-label="Pages">
-          <a href="/">Monitor</a>
-          <a href="/dashboard.html">TV</a>
-          <a href="/login.html">Departments</a>
-          <a href="/control.html">Control</a>
-          <a href="/midi.html">MIDI</a>
-          <a href="/report.html">Report</a>
-          <a href="/admin.html">Admin</a>
-        </nav>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
       </header>
 
       <p id="meterNotice" class="notice" hidden></p>
@@ -49,6 +41,7 @@
         <div id="meterPreview" class="tv-meters meter-preview" aria-label="Local preview"></div>
       </section>
     </main>
+    <script src="/nav.js" defer></script>
     <script src="/meter-source.js" type="module"></script>
   </body>
 </html>
