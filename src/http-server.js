@@ -23,7 +23,7 @@ import {
 import { midiOutputStatus, selectMidiOutput, sendMidiBytes } from "./midi-out.js";
 import { networkUrls, qrSvg } from "./network.js";
 import { connectNetworkMidi, disconnectNetworkMidi, rtpMidiStatus } from "./rtp-midi.js";
-import { connectToQlab, disconnectQlab, qlabDiagnostics } from "./qlab.js";
+import { connectToQlab, disconnectQlab, keepConnected, qlabDiagnostics } from "./qlab.js";
 import {
   createControlToken,
   getSettings,
@@ -136,6 +136,8 @@ async function routeRequest(request, response) {
   }
 
   if (url.pathname.startsWith("/api/dept/")) {
+    // "Open as admin" (?dept=...) asks for the admin login rather than sending you to the department login.
+    if (url.searchParams.get("dept") && !hasAdminAuth(request)) return requestAdminAuth(response);
     const department = requestDepartment(request, url);
     if (!department) return sendJson(response, { error: "Please log in." }, 401);
     if (url.pathname === "/api/dept/me" && request.method === "GET") {
@@ -165,11 +167,7 @@ async function routeRequest(request, response) {
 
   if (url.pathname === "/api/admin/restore" && request.method === "POST") {
     const { saved, restartRequired } = await importSetup(await readBody(request));
-    if (saved.autoConnect && saved.host) {
-      connectToQlab(saved).catch((error) => {
-        state.lastError = error.message;
-      });
-    }
+    if (saved.autoConnect && saved.host) keepConnected(saved);
     broadcastPatch();
     return sendJson(response, { ok: true, restartRequired });
   }

@@ -1,10 +1,8 @@
 import { HTTP_PORT, HTTPS_PORT } from "./src/config.js";
 import { createHttpServer, createHttpsServer, startHeartbeat } from "./src/http-server.js";
 import { networkUrls } from "./src/network.js";
-import { connectToQlab } from "./src/qlab.js";
+import { keepConnected } from "./src/qlab.js";
 import { getSettings } from "./src/settings.js";
-import { state } from "./src/state.js";
-import { broadcastSnapshot } from "./src/events.js";
 import { attachMidiSocket, initMidiOutput } from "./src/midi-out.js";
 import { startRtpMidi } from "./src/rtp-midi.js";
 import { loadTlsCredentials } from "./src/tls.js";
@@ -22,10 +20,8 @@ export function startServer() {
 
     const settings = getSettings();
     if (settings.autoConnect && settings.host) {
-      connectToQlab(settings).catch((error) => {
-        state.lastError = error.message;
-        broadcastSnapshot();
-      });
+      // Keeps retrying if QLab isn't open yet.
+      keepConnected(settings);
     }
   });
 

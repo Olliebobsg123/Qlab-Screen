@@ -7,7 +7,14 @@ import { resetRunningTracking, recordRunningCues } from "./show.js";
 import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
 const pending = new Map();
+// Three independent loops, so one slow or unanswered question can't hold up the others:
+// what's running (and cue list changes), running cue timing, and cue list playheads.
 const POLL_MS = 500;
+const TIMING_MS = 250;
+// New, renamed or deleted cues show up within about half a second, even if QLab doesn't announce them.
+const CUE_LIST_MS = 500;
+const PLAYHEAD_MS = 1000;
+const PLAYHEAD_BACKOFF_MS = 30_000;
 let openWorkspaces = [];
 const extraNoteIds = [];
 
@@ -25,10 +32,29 @@ let playheadField = "";
 let refreshQueued = { queued: false, forceCues: false };
 let pollTimer = null;
 let thumpTimer = null;
+let timingTimer = null;
+let playheadTimer = null;
+let timingBusy = false;
+let cueListTimer = null;
+let cueListBusy = false;
+// Reconnect automatically if QLab restarts or the network drops, until someone disconnects on purpose.
+let lastConnection = null;
+let reconnectTimer = null;
+const RECONNECT_MS = 3000;
+let playheadBusy = false;
+// Durations rarely change, so they're read in the background and cached, not on every tick.
+const durations = new Map();
+const durationsInFlight = new Set();
+// Cue lists that didn't answer a playhead question (e.g. carts) are left alone for a while.
+const playheadBackoff = new Map();
 let qlabSocket = null;
 let slipBuffer = Buffer.alloc(0);
 
-export async function connectToQlab({ host, passcode = "", workspaceId = "" }) {
+export async function connectToQlab(connection) {
+  const { host, passcode = "", workspaceId = "" } = connection;
+  clearTimeout(reconnectTimer);
+  // Kept as the same object so keepConnected() can tell its own retries apart from a new connection.
+  lastConnection = connection;
   clearTimers();
   setDisconnected({ host });
   broadcastSnapshot();
@@ -72,10 +98,26 @@ export async function connectToQlab({ host, passcode = "", workspaceId = "" }) {
   await refreshAllPlayheads();
   // Twice a second; screens count smoothly in between using the timestamps on each reading.
   pollTimer = setInterval(refreshAll, POLL_MS);
+  cueListTimer = setInterval(refreshCueLists, CUE_LIST_MS);
+  timingTimer = setInterval(refreshTiming, TIMING_MS);
+  playheadTimer = setInterval(refreshActivePlayhead, PLAYHEAD_MS);
   thumpTimer = setInterval(() => send(host, `/workspace/${state.workspaceId}/thump`).catch(() => {}), 15000);
 }
 
+// Keep trying to connect (at startup before QLab is open, or after losing the connection).
+export function keepConnected(connection) {
+  lastConnection = connection;
+  clearTimeout(reconnectTimer);
+  connectToQlab(connection).catch((error) => {
+    state.lastError = `${error.message} Retrying…`;
+    broadcastSnapshot();
+    if (lastConnection === connection) reconnectTimer = setTimeout(() => keepConnected(connection), RECONNECT_MS);
+  });
+}
+
 export async function disconnectQlab() {
+  lastConnection = null;
+  clearTimeout(reconnectTimer);
   const { host, workspaceId } = state;
   clearTimers();
   if (host && workspaceId) {
@@ -99,7 +141,7 @@ export async function refreshAll(forceCues = false) {
     const shouldLoadCues = forceCues || state.cues.length === 0;
     const [cueReply, runningReply] = await Promise.all([
       shouldLoadCues ? query(state.host, `/workspace/${state.workspaceId}/cueLists`, [], 5000) : Promise.resolve(null),
-      query(state.host, `/workspace/${state.workspaceId}/runningOrPausedCues`, [], 3000)
+      query(state.host, `/workspace/${state.workspaceId}/runningOrPausedCues`, [], 1500)
     ]);
 
     if (cueReply) {
@@ -109,7 +151,12 @@ export async function refreshAll(forceCues = false) {
     state.running = flattenCues(asArray(runningReply.data));
     const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
     recordRunningCues(state.running, cueMap);
-    await Promise.all([refreshTiming(), refreshActivePlayhead()]);
+    // Drop timing for cues that stopped, and get a reading for new ones straight away.
+    const runningIds = new Set(state.running.map((cue) => cue.uniqueID));
+    if (Object.keys(state.time).some((id) => !runningIds.has(id))) {
+      state.time = Object.fromEntries(Object.entries(state.time).filter(([id]) => runningIds.has(id)));
+    }
+    if (state.running.some((cue) => !state.time[cue.uniqueID])) refreshTiming();
     refreshNotes();
     state.lastError = "";
   } catch (error) {
@@ -125,33 +172,69 @@ export async function refreshAll(forceCues = false) {
   }
 }
 
-function refreshTiming() {
-  const timing = {};
-  const runningIds = state.running.map((cue) => cue.uniqueID).filter(Boolean);
+// Elapsed time and pause state for running cues, four times a second. Each reading is stamped
+// with when QLab answered, so screens can count on smoothly from it.
+async function refreshTiming() {
+  if (!state.connected || timingBusy) return;
+  const ids = state.running.map((cue) => cue.uniqueID).filter(Boolean);
+  if (!ids.length) {
+    if (Object.keys(state.time).length) {
+      state.time = {};
+      broadcastChanges();
+    }
+    return;
+  }
 
-  return Promise.all(runningIds.map(async (id) => {
-    const base = `/workspace/${state.workspaceId}/cue_id/${id}`;
-    const askedAt = Date.now();
-    const fields = await Promise.allSettled([
-      query(state.host, `${base}/actionElapsed`, [], 1200),
-      query(state.host, `${base}/currentDuration`, [], 1200),
-      query(state.host, `${base}/duration`, [], 1200),
-      query(state.host, `${base}/isPaused`, [], 1200)
-    ]);
+  timingBusy = true;
+  try {
+    const next = {};
+    await Promise.all(ids.map(async (id) => {
+      const base = `/workspace/${state.workspaceId}/cue_id/${id}`;
+      const askedAt = Date.now();
+      let answeredAt = askedAt;
+      const [elapsed, paused] = await Promise.allSettled([
+        query(state.host, `${base}/actionElapsed`, [], 800).then((reply) => {
+          answeredAt = Date.now();
+          return reply;
+        }),
+        query(state.host, `${base}/isPaused`, [], 800)
+      ]);
+      ensureDuration(id);
+      const previous = state.time[id];
+      if (elapsed.status !== "fulfilled") {
+        // No answer this time: keep the last reading so screens keep counting from it.
+        if (previous) next[id] = { ...previous, duration: durations.get(id)?.value || previous.duration };
+        return;
+      }
+      next[id] = {
+        actionElapsed: settledNumber(elapsed),
+        duration: durations.get(id)?.value || previous?.duration || 0,
+        paused: paused.status === "fulfilled" ? Boolean(Number(paused.value.data || 0)) : Boolean(previous?.paused),
+        at: Math.round((askedAt + answeredAt) / 2)
+      };
+    }));
+    // Only keep cues that are still running (one may have stopped while we were asking).
+    const stillRunning = new Set(state.running.map((cue) => cue.uniqueID));
+    state.time = Object.fromEntries(Object.entries(next).filter(([id]) => stillRunning.has(id)));
+  } finally {
+    timingBusy = false;
+    broadcastChanges();
+  }
+}
 
-    const currentDuration = settledNumber(fields[1]);
-    const duration = currentDuration > 0 ? currentDuration : settledNumber(fields[2]);
-
-    timing[id] = {
-      actionElapsed: settledNumber(fields[0]),
-      duration,
-      paused: Boolean(Number(settledData(fields[3]) || 0)),
-      // When this reading was taken (server clock), so screens can count on smoothly from it.
-      at: Math.round((askedAt + Date.now()) / 2)
-    };
-  })).then(() => {
-    state.time = timing;
-  });
+// Read a cue's duration in the background (and again every few seconds, as it can change).
+function ensureDuration(id) {
+  const cached = durations.get(id);
+  if ((cached && Date.now() - cached.at < 5000) || durationsInFlight.has(id)) return;
+  durationsInFlight.add(id);
+  const base = `/workspace/${state.workspaceId}/cue_id/${id}`;
+  Promise.allSettled([
+    query(state.host, `${base}/currentDuration`, [], 1500),
+    query(state.host, `${base}/duration`, [], 1500)
+  ]).then(([current, fallback]) => {
+    const value = settledNumber(current) > 0 ? settledNumber(current) : settledNumber(fallback);
+    durations.set(id, { value, at: Date.now() });
+  }).finally(() => durationsInFlight.delete(id));
 }
 
 function settledData(result) {
@@ -166,8 +249,16 @@ function settledNumber(result) {
 function clearTimers() {
   clearInterval(pollTimer);
   clearInterval(thumpTimer);
+  clearInterval(timingTimer);
+  clearInterval(playheadTimer);
+  clearInterval(cueListTimer);
+  cueListTimer = null;
   pollTimer = null;
   thumpTimer = null;
+  timingTimer = null;
+  playheadTimer = null;
+  durations.clear();
+  playheadBackoff.clear();
 }
 
 function describeWorkspace(workspace) {
@@ -287,9 +378,34 @@ function openQlabConnection(host) {
       if (qlabSocket === socket) {
         qlabSocket = null;
         rejectPending("QLab TCP connection closed.");
+        handleConnectionLost();
       }
     });
   });
+}
+
+function handleConnectionLost() {
+  if (!state.connected || !lastConnection) return;
+  const connection = lastConnection;
+  clearTimers();
+  setDisconnected({ host: connection.host, lastError: "Lost the connection to QLab. Reconnecting…" });
+  broadcastSnapshot();
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => keepConnected(connection), RECONNECT_MS);
+}
+
+// Re-read every cue list twice a second; screens only get a new list when something changed.
+async function refreshCueLists() {
+  if (!state.connected || cueListBusy) return;
+  cueListBusy = true;
+  try {
+    const reply = await query(state.host, `/workspace/${state.workspaceId}/cueLists`, [], 5000);
+    if (markCuesIfChanged(flattenCues(asArray(reply.data)))) broadcastChanges();
+  } catch {
+    // Try again next round.
+  } finally {
+    cueListBusy = false;
+  }
 }
 
 function closeQlabConnection() {
@@ -398,7 +514,7 @@ async function queryPlayhead(listId) {
   const fields = playheadField ? [playheadField] : ["playheadId", "playbackPositionId"];
   for (const field of fields) {
     try {
-      const reply = await query(state.host, `${base}/${field}`, [], 1500);
+      const reply = await query(state.host, `${base}/${field}`, [], 800);
       if (reply.status && reply.status !== "ok") continue;
       playheadField = field;
       return { ok: true, cueId: typeof reply.data === "string" ? reply.data : "" };
@@ -410,7 +526,7 @@ async function queryPlayhead(listId) {
 }
 
 async function refreshAllPlayheads() {
-  for (const list of cueLists()) {
+  for (const list of cueLists().filter((entry) => entry.type !== "Cue Cart")) {
     const result = await queryPlayhead(list.uniqueID);
     if (result.ok) playheads.set(list.uniqueID, normalizeCueId(result.cueId));
   }
@@ -424,13 +540,28 @@ async function refreshAllPlayheads() {
 // Polled every refresh so standby cues correct themselves even if an update message was missed.
 // Every cue list is polled (departments each follow their own list); workspaces have only a few.
 async function refreshActivePlayhead() {
+  if (!state.connected || playheadBusy) return;
   if (!activeListId && cueLists().length) activeListId = cueLists()[0].uniqueID;
-  const lists = cueLists().slice(0, 12);
-  const results = await Promise.all(lists.map((list) => queryPlayhead(list.uniqueID)));
-  lists.forEach((list, index) => {
-    if (results[index].ok) playheads.set(list.uniqueID, normalizeCueId(results[index].cueId));
-  });
-  applyStandby();
+  const now = Date.now();
+  // Carts have no playhead, and lists that didn't answer recently are skipped for a while.
+  const lists = cueLists()
+    .filter((list) => list.type !== "Cue Cart" && (playheadBackoff.get(list.uniqueID) || 0) <= now)
+    .slice(0, 12);
+  playheadBusy = true;
+  try {
+    const results = await Promise.all(lists.map((list) => queryPlayhead(list.uniqueID)));
+    lists.forEach((list, index) => {
+      if (results[index].ok) {
+        playheads.set(list.uniqueID, normalizeCueId(results[index].cueId));
+        playheadBackoff.delete(list.uniqueID);
+      } else {
+        playheadBackoff.set(list.uniqueID, Date.now() + PLAYHEAD_BACKOFF_MS);
+      }
+    });
+    applyStandby();
+  } finally {
+    playheadBusy = false;
+  }
 }
 
 // One property of one cue (e.g. its duration), for the department cue panel.

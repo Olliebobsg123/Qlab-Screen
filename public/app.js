@@ -431,7 +431,7 @@ function renderCue(cue, isRunning, isStandby) {
   const duration = Number(timing.duration || 0);
   const remaining = duration > 0 ? Math.max(0, duration - elapsed) : null;
   const liveTiming = isRunning
-    ? `<div class="cue-live-time">${escapeHtml(formatTime(elapsed))}${remaining != null ? ` / ${escapeHtml(formatTime(remaining))}` : ""}</div>`
+    ? `<div class="cue-live-time"><span data-live="elapsed" data-cue="${escapeHtml(cue.uniqueID)}">${escapeHtml(formatTime(elapsed))}</span>${remaining != null ? ` / <span data-live="remaining" data-cue="${escapeHtml(cue.uniqueID)}">${escapeHtml(formatTime(remaining))}</span>` : ""}</div>`
     : "";
   return `
     <article class="cue-row ${isRunning ? "running" : ""} ${isStandby ? "standby" : ""} ${isDisabled ? "disabled" : ""} ${isGroup ? "group-row" : ""}" data-cue-id="${escapeHtml(cue.uniqueID)}" data-parent-id="${escapeHtml(cue.parentId || "")}" style="--depth:${Number(cue.depth || 0)}">

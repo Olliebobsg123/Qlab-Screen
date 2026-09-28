@@ -173,7 +173,16 @@ A login lasts 14 days, and changing a department's password signs everyone out o
 
 ### Live timing
 
-The server reads QLab twice a second. Between readings, every screen counts running cues on smoothly (in tenths of a second) from the time of the last reading. Elapsed and remaining times, progress bars and countdown warnings all move continuously instead of jumping.
+The server runs separate loops, so a slow or unanswered question can't hold up the others:
+
+- **Running cue timing:** four times a second (elapsed time and pause state; durations are cached).
+- **What's running:** twice a second.
+- **The cue list:** twice a second. Added, renamed or deleted cues appear within about half a second, even if QLab doesn't announce the change. Screens only redraw when something actually changed.
+- **Cue list playheads:** once a second. Cue carts are skipped, and a list that doesn't answer is left alone for 30 seconds.
+
+Between readings, every screen counts running cues on smoothly (in tenths of a second). Elapsed and remaining times, progress bars and countdown warnings all move continuously.
+
+If QLab quits, restarts or the network drops, the app reconnects by itself every few seconds. It also waits for QLab if the app starts first. A manual Disconnect stays disconnected.
 
 ### Saving your setup
 
