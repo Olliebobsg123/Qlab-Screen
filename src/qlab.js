@@ -7,6 +7,7 @@ import { resetRunningTracking, recordRunningCues } from "./show.js";
 import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
 const pending = new Map();
+const POLL_MS = 500;
 let openWorkspaces = [];
 const extraNoteIds = [];
 
@@ -69,7 +70,8 @@ export async function connectToQlab({ host, passcode = "", workspaceId = "" }) {
   await send(host, `/workspace/${state.workspaceId}/updates`, [1]);
   await refreshAll();
   await refreshAllPlayheads();
-  pollTimer = setInterval(refreshAll, 1000);
+  // Twice a second; screens count smoothly in between using the timestamps on each reading.
+  pollTimer = setInterval(refreshAll, POLL_MS);
   thumpTimer = setInterval(() => send(host, `/workspace/${state.workspaceId}/thump`).catch(() => {}), 15000);
 }
 
@@ -129,6 +131,7 @@ function refreshTiming() {
 
   return Promise.all(runningIds.map(async (id) => {
     const base = `/workspace/${state.workspaceId}/cue_id/${id}`;
+    const askedAt = Date.now();
     const fields = await Promise.allSettled([
       query(state.host, `${base}/actionElapsed`, [], 1200),
       query(state.host, `${base}/currentDuration`, [], 1200),
@@ -142,7 +145,9 @@ function refreshTiming() {
     timing[id] = {
       actionElapsed: settledNumber(fields[0]),
       duration,
-      paused: Boolean(Number(settledData(fields[3]) || 0))
+      paused: Boolean(Number(settledData(fields[3]) || 0)),
+      // When this reading was taken (server clock), so screens can count on smoothly from it.
+      at: Math.round((askedAt + Date.now()) / 2)
     };
   })).then(() => {
     state.time = timing;
@@ -426,6 +431,13 @@ async function refreshActivePlayhead() {
     if (results[index].ok) playheads.set(list.uniqueID, normalizeCueId(results[index].cueId));
   });
   applyStandby();
+}
+
+// One property of one cue (e.g. its duration), for the department cue panel.
+export async function queryCueValue(cueId, field) {
+  if (!state.connected) return null;
+  const reply = await query(state.host, `/workspace/${state.workspaceId}/cue_id/${cueId}/${field}`, [], 1500);
+  return reply.status && reply.status !== "ok" ? null : reply.data;
 }
 
 export function listPlayhead(listId) {

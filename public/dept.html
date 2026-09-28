@@ -27,7 +27,7 @@
 
       <section class="dept-grid">
         <div class="dept-main">
-          <!-- Show-wide controls, for departments with those powers (the Stage Manager has them all) -->
+          <!-- Whole-show controls, for departments with those powers (the Stage Manager has them all) -->
           <section id="showCard" class="panel show-card" hidden>
             <div id="showGoBlock">
               <div class="show-standby">
@@ -54,16 +54,9 @@
               </button>
               <button id="hardStopButton" type="button" class="danger-outline">Hard stop</button>
             </div>
-            <form id="cueNumberForm" class="cue-form">
-              <label>
-                <span>Cue number</span>
-                <input name="cue" autocomplete="off" placeholder="e.g. 42" required>
-              </label>
-              <button type="submit" class="secondary" data-cue-action="startCue">Start</button>
-              <button type="submit" class="secondary" data-cue-action="standby">Standby</button>
-            </form>
           </section>
 
+          <!-- This department's own GO (its cue list, or its own cues in show order) -->
           <div id="goCards" class="go-cards"></div>
 
           <div class="panel dept-panel">
@@ -76,27 +69,25 @@
         </div>
 
         <div class="dept-side">
-          <section id="clockCard" class="panel side-card" hidden>
-            <div class="side-card-head">
-              <h2>Show clock</h2>
-              <span id="clockLabel" class="eyebrow">Not started</span>
+          <nav id="sideTabs" class="tabs side-tabs" role="tablist" aria-label="Sections" hidden>
+            <button type="button" role="tab" class="tab" data-side-tab="cues">Cues</button>
+            <button type="button" role="tab" class="tab" data-side-tab="calls">Calls</button>
+            <button type="button" role="tab" class="tab" data-side-tab="clock">Clock</button>
+          </nav>
+
+          <section id="side-cues" class="panel dept-panel dept-cues-panel side-panel">
+            <div class="panel-head">
+              <h2 id="deptCuesTitle">My cues</h2>
+              <span id="deptCueCount">0 cues</span>
             </div>
-            <div id="clockValue" class="clock-big" data-state="idle">--:--</div>
-            <div class="side-buttons">
-              <button type="button" class="secondary" data-show="showStart">Start show</button>
-              <button type="button" class="secondary" data-show="showEnd">End show</button>
+            <div class="cue-search">
+              <input id="cueSearch" type="search" autocomplete="off" placeholder="Find a cue by number or name" aria-label="Find a cue">
             </div>
-            <div class="interval-row">
-              <label>
-                <span>Interval (min)</span>
-                <input id="intervalMinutes" type="number" min="0" max="180" value="20" inputmode="numeric">
-              </label>
-              <button id="intervalStartButton" type="button" class="secondary">Start interval</button>
-              <button type="button" class="secondary" data-show="intervalEnd">End</button>
-            </div>
+            <p class="cue-hint quiet">Tap a cue for its options.</p>
+            <div id="deptCues" class="dept-cues empty">No cues yet.</div>
           </section>
 
-          <section id="pagingCard" class="panel side-card" hidden>
+          <section id="side-calls" class="panel side-card side-panel" hidden>
             <div class="side-card-head">
               <h2>Backstage calls</h2>
               <span id="pageStatus" class="eyebrow">No active call</span>
@@ -116,11 +107,7 @@
               </label>
               <label>
                 <span>To</span>
-                <select name="target">
-                  <option value="all">Every screen</option>
-                  <option value="dashboard">TV dashboards</option>
-                  <option value="monitor">Monitors</option>
-                </select>
+                <select name="target"></select>
               </label>
               <label>
                 <span>Style</span>
@@ -141,13 +128,25 @@
             </form>
           </section>
 
-          <div class="panel dept-panel dept-cues-panel">
-            <div class="panel-head">
-              <h2 id="deptCuesTitle">My cues</h2>
-              <span id="deptCueCount">0 cues</span>
+          <section id="side-clock" class="panel side-card side-panel" hidden>
+            <div class="side-card-head">
+              <h2>Show clock</h2>
+              <span id="clockLabel" class="eyebrow">Not started</span>
             </div>
-            <div id="deptCues" class="dept-cues empty">No cues yet.</div>
-          </div>
+            <div id="clockValue" class="clock-big" data-state="idle">--:--</div>
+            <div class="side-buttons">
+              <button type="button" class="secondary" data-show="showStart">Start show</button>
+              <button type="button" class="secondary" data-show="showEnd">End show</button>
+            </div>
+            <div class="interval-row">
+              <label>
+                <span>Interval (min)</span>
+                <input id="intervalMinutes" type="number" min="0" max="180" value="20" inputmode="numeric">
+              </label>
+              <button id="intervalStartButton" type="button" class="secondary">Start interval</button>
+              <button type="button" class="secondary" data-show="intervalEnd">End</button>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -155,6 +154,52 @@
         <input id="deptKeyboard" type="checkbox">
         <span>Space bar = GO on this device</span>
       </label>
+
+      <!-- Options for one cue: start, standby, start from a point, pause, skip -->
+      <dialog id="cuePanel" class="cue-panel">
+        <form method="dialog" class="cue-panel-inner">
+          <div class="cue-panel-head">
+            <div>
+              <span class="eyebrow" id="panelType">Cue</span>
+              <h2><span id="panelNumber" class="go-number"></span> <span id="panelName"></span></h2>
+            </div>
+            <button type="submit" class="tool-button" aria-label="Close">Close</button>
+          </div>
+          <p id="panelNotes" class="notes-text" hidden></p>
+
+          <div id="panelRunning" class="panel-running" hidden>
+            <div class="panel-times">
+              <span data-live="elapsed" id="panelElapsed">00:00.0</span>
+              <span id="panelState" class="status-chip" data-state="on">Playing</span>
+              <span data-live="remaining" data-prefix="−" id="panelRemaining"></span>
+            </div>
+          </div>
+
+          <div id="panelScrub" class="panel-scrub" hidden>
+            <input id="scrubRange" type="range" min="0" max="100" step="0.1" value="0" aria-label="Position">
+            <div class="scrub-labels">
+              <span id="scrubValue">0:00.0</span>
+              <span id="scrubDuration">0:00.0</span>
+            </div>
+            <div id="skipButtons" class="skip-buttons">
+              <button type="button" class="secondary" data-skip="-10">−10s</button>
+              <button type="button" class="secondary" data-skip="-5">−5s</button>
+              <button type="button" class="secondary" data-skip="5">+5s</button>
+              <button type="button" class="secondary" data-skip="10">+10s</button>
+            </div>
+          </div>
+
+          <div class="panel-actions">
+            <button type="button" id="panelStart">Start</button>
+            <button type="button" id="panelStartFrom" class="secondary" hidden>Start from here</button>
+            <button type="button" id="panelPause" class="secondary" hidden>Pause</button>
+            <button type="button" id="panelStop" class="secondary" hidden>Stop</button>
+            <button type="button" id="panelStandby" class="secondary">Standby</button>
+          </div>
+          <p id="panelHint" class="quiet panel-hint"></p>
+        </form>
+      </dialog>
+
       <p id="deptToast" class="toast" aria-live="polite"></p>
     </main>
     <script src="/nav.js" defer></script>

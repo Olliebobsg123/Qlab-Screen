@@ -7,6 +7,7 @@ import {
   configuredDepartmentFilter,
   loadConfiguredDepartments,
   readCueFilter,
+  startLiveTimers,
   renderPageOverlay,
   showClockInfo,
   syncServerTime
@@ -55,6 +56,7 @@ const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const viewerClientId = getViewerClientId();
 
+startLiveTimers(() => currentState);
 updateClock();
 setInterval(() => {
   updateClock();
@@ -156,6 +158,20 @@ function render() {
   tvElapsed.textContent = `${formatTime(elapsed)} elapsed`;
   tvRemaining.textContent = remaining == null ? "duration unavailable" : `${formatTime(remaining)} remaining`;
   tvCurrent.dataset.ending = endingClass(remaining);
+  // Count smoothly between updates.
+  for (const [element, kind, extra] of [
+    [tvElapsed, "elapsed", { suffix: " elapsed" }],
+    [tvRemaining, "remaining", { suffix: " remaining", empty: "duration unavailable" }],
+    [tvProgress, "progress", {}],
+    [tvCurrent, "ending", {}]
+  ]) {
+    if (primary?.uniqueID) {
+      Object.assign(element.dataset, { live: kind, cue: primary.uniqueID, ...extra });
+    } else {
+      delete element.dataset.live;
+      delete element.dataset.cue;
+    }
+  }
 
   const currentNotes = getCueNotes(currentState, primary?.uniqueID);
   tvCurrentNotes.hidden = !currentNotes;

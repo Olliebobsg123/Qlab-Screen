@@ -3,7 +3,7 @@ import { hasAdminAuth } from "./auth.js";
 import { runControlAction } from "./control.js";
 import { broadcastPatch } from "./events.js";
 import { getClientIp } from "./http-utils.js";
-import { listPlayhead, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
+import { listPlayhead, queryCueValue, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
 import { DEPARTMENT_PERMISSIONS, controlSettings, getDepartments, saveDepartments, sessionSecret } from "./settings.js";
 import { logEvent } from "./show.js";
 import { registerMetaProvider, state } from "./state.js";
@@ -29,6 +29,7 @@ const PERMISSION_ACTIONS = {
   paging: ["page", "clearPage"],
   showClock: ["showStart", "showEnd", "intervalStart", "intervalEnd"]
 };
+const SCRUB_TYPES = new Set(["Audio", "Video", "Mic", "Fade", "MIDI File", "Group", "Text", "Camera", "Light"]);
 const STAGE_MANAGER_ID = "stage-manager";
 
 // The Stage Manager department always exists: create it on first run (and if it was lost).
@@ -342,6 +343,20 @@ export async function runDepartmentAction(department, body = {}) {
     const id = requireList();
     detail = action === "next" ? "Playhead next" : "Playhead previous";
     await stepPlayhead(id, action === "next" ? 1 : -1);
+  } else if (action === "pauseCue" || action === "resumeCue") {
+    const id = requireCue();
+    detail = `${action === "pauseCue" ? "Pause" : "Resume"} ${cueLabel(id)}`;
+    await sendWorkspaceCommand(`/cue_id/${id}/${action === "pauseCue" ? "pause" : "resume"}`);
+  } else if (action === "startAt" || action === "seek") {
+    // Start a cue part-way through, or jump a running cue to a new time. Needs the "scrub" power.
+    const id = requireCue();
+    if (!department.permissions.includes("scrub")) throw httpError(403, "Your department can't choose start times. Ask the admin for the Start-from power.");
+    const seconds = Number(body.time);
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > 86400) throw httpError(400, "Choose a valid time.");
+    const time = Math.round(seconds * 100) / 100;
+    detail = `${action === "startAt" ? "Start" : "Jump"} ${cueLabel(id)} at ${formatSeconds(time)}`;
+    await sendWorkspaceCommand(`/cue_id/${id}/loadActionAt`, [time]);
+    if (action === "startAt") await sendWorkspaceCommand(`/cue_id/${id}/start`);
   } else if (action === "stopAll") {
     const running = state.running.filter((cue) => owned.has(cue.uniqueID));
     detail = `Stop all (${running.length})`;
@@ -354,12 +369,36 @@ export async function runDepartmentAction(department, body = {}) {
   return { ok: true };
 }
 
+// Details for the cue panel: how long it is, and whether this department may scrub it.
+export async function departmentCueInfo(department, cueId) {
+  const id = String(cueId || "");
+  const anyCue = department.permissions.includes("anyCue");
+  if (!anyCue && !departmentCueIds(department).includes(id)) throw httpError(403, "That cue doesn't belong to your department.");
+  const cue = state.cues.find((entry) => entry.uniqueID === id);
+  const running = state.time[id];
+  let duration = Number(running?.duration || 0);
+  if (!duration) duration = Number(await queryCueValue(id, "duration").catch(() => 0)) || 0;
+  return {
+    cueId: id,
+    duration,
+    canScrub: department.permissions.includes("scrub") && duration > 0 && SCRUB_TYPES.has(cue?.type)
+  };
+}
+
+function formatSeconds(seconds) {
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
+}
+
 // Show-wide actions (whole-show GO, panic, show clock, paging...) for departments with the power.
 async function runShowAction(department, body) {
   const controlAction = String(body.control || "");
   const permission = Object.keys(PERMISSION_ACTIONS).find((key) => PERMISSION_ACTIONS[key].includes(controlAction));
   if (!permission) throw httpError(400, `Unknown action "${controlAction}".`);
   if (!department.permissions.includes(permission)) throw httpError(403, "Your department isn't allowed to do that.");
+  if (controlAction === "page" && department.pageTargets.length &&
+    !department.pageTargets.includes(String(body.target || "all").toLowerCase())) {
+    throw httpError(403, "Your department can't send calls there.");
+  }
   const result = await runControlAction(controlAction, { ...body, source: department.name }, broadcastPatch);
   return { ok: true, status: result?.status || "ok" };
 }
@@ -399,7 +438,8 @@ function publicDepartment(department) {
     cueTypes: department.cueTypes,
     namePrefixes: department.namePrefixes,
     role: department.role,
-    permissions: department.permissions
+    permissions: department.permissions,
+    pageTargets: department.pageTargets
   };
 }
 

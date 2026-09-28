@@ -171,6 +171,10 @@ The server checks every command. A department can't start, stop or move any cue 
 
 A login lasts 14 days, and changing a department's password signs everyone out of it. The admin can open any department's page from **Admin → Departments → Open as admin**. Backstage pages can target a single department.
 
+### Live timing
+
+The server reads QLab twice a second. Between readings, every screen counts running cues on smoothly (in tenths of a second) from the time of the last reading. Elapsed and remaining times, progress bars and countdown warnings all move continuously instead of jumping.
+
 ### Saving your setup
 
 In **Admin → Backup**, press **Download setup file** to save a `.qlabconnect` file (JSON inside). It holds:
@@ -213,6 +217,21 @@ What makes this the Stage Manager is a set of **powers**. Every department card 
 | Any cue | See the whole show; start, stop or stand by any cue |
 | Backstage calls | Send calls to screens |
 | Show clock | Start and end the show and intervals |
+| Start from / skip | Choose where audio and video cues start, pause and resume them, and skip or scrub while they play |
+
+If a department has **Backstage calls**, you can also choose **who it can send calls to**: every screen, TVs, monitors, or specific departments. With none ticked, it can send calls anywhere. The server enforces this.
+
+**Tap a cue for its options.** On department pages (including the Stage Manager's), tapping any cue opens its panel. The panel has:
+
+- Start, Standby and Stop
+- the cue's notes
+- with **Start from / skip**:
+  - a scrub bar to start part-way through
+  - while playing: Pause/Resume, −10 s / −5 s / +5 s / +10 s, and drag-to-jump
+
+The search box above the cue list finds a cue by number or name. Press Enter on an exact number to open it. The Stage Manager's calls and show clock are tabs next to the cue list.
+
+Jumping and starting part-way use QLab's `loadActionAt` command. Check it behaves as expected with your QLab version in a rehearsal.
 
 Safety measures:
 

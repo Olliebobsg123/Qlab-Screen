@@ -2983,3 +2983,179 @@ body.focus-mode .topbar {
     position: static;
   }
 }
+
+/* --- Department page: tappable rows, cue panel, side tabs --- */
+
+.dept-cue,
+.dept-run {
+  width: 100%;
+  height: auto;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+}
+
+.dept-cue:hover,
+.dept-run:hover {
+  background: var(--panel-strong);
+}
+
+.dept-cue:active,
+.dept-run:active {
+  transform: none;
+  background: var(--panel-strong);
+}
+
+.dept-run {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--running);
+  background: var(--running-soft);
+}
+
+.dept-run .progress {
+  display: block;
+}
+
+.dept-run .progress > span {
+  width: 0;
+}
+
+.dept-cue-state {
+  justify-self: end;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.cue-search {
+  padding: 10px 14px 0;
+}
+
+.cue-search input {
+  height: 38px;
+}
+
+.cue-hint {
+  margin: 6px 14px 8px;
+  font-size: 0.78rem;
+}
+
+.side-tabs {
+  margin: 0;
+}
+
+.side-tabs + .side-panel,
+.side-tabs ~ .side-panel {
+  border-top-left-radius: 0;
+}
+
+.dept-side > .side-panel {
+  margin: 0;
+}
+
+.cue-panel {
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.cue-panel::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.cue-panel-inner {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.cue-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.cue-panel-head h2 {
+  margin-top: 4px;
+  font-size: 1.3rem;
+}
+
+.panel-times {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+#panelRemaining {
+  color: var(--running);
+}
+
+.panel-scrub {
+  display: grid;
+  gap: 8px;
+}
+
+.panel-scrub input[type="range"] {
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--running);
+}
+
+.scrub-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.skip-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.panel-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.panel-actions button {
+  height: 50px;
+}
+
+.panel-hint:empty {
+  display: none;
+}
+
+.panel-hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* On phones the cue panel slides up from the bottom. */
+@media (max-width: 640px) {
+  .cue-panel {
+    width: 100vw;
+    max-width: 100vw;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+}

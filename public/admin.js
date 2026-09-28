@@ -196,8 +196,10 @@ const PERMISSIONS = [
   ["transport", "Stop & panic", "Pause, resume, stop all, panic and hard stop"],
   ["anyCue", "Any cue", "See the whole show and start, stop or standby any cue"],
   ["paging", "Backstage calls", "Send calls to screens"],
-  ["showClock", "Show clock", "Start and end the show and intervals"]
+  ["showClock", "Show clock", "Start and end the show and intervals"],
+  ["scrub", "Start from / skip", "Choose where audio and video cues start, pause them, and skip or scrub while they play"]
 ];
+const CALL_TARGETS = [["all", "Every screen"], ["dashboard", "TV dashboards"], ["monitor", "Monitors"]];
 let departments = [];
 let cueListOptions = [];
 
@@ -209,6 +211,11 @@ document.querySelector("#addDeptButton").addEventListener("click", () => {
   deptEditor.querySelector(".dept-card:last-child input[name=name]")?.focus();
 });
 document.querySelector("#saveDeptButton").addEventListener("click", saveDepartments);
+// Only show "Can send calls to" for departments allowed to send calls.
+deptEditor.addEventListener("change", (event) => {
+  if (event.target.name !== "permission" || event.target.value !== "paging") return;
+  event.target.closest(".dept-card").querySelector(".call-targets").hidden = !event.target.checked;
+});
 deptEditor.addEventListener("click", (event) => {
   const remove = event.target.closest("[data-remove-dept]");
   if (!remove) return;
@@ -256,6 +263,13 @@ function renderDepartments() {
           <legend>Powers <span class="quiet">(on top of firing its own cues)</span></legend>
           ${PERMISSIONS.map(([id, label, help]) => `
             <label class="chip-check" title="${escapeText(help)}"><input type="checkbox" name="permission" value="${id}" ${(department.permissions || []).includes(id) ? "checked" : ""}><span>${escapeText(label)}</span></label>`).join("")}
+        </fieldset>
+      </div>
+      <div class="dept-card-row call-targets" ${(department.permissions || []).includes("paging") ? "" : "hidden"}>
+        <fieldset class="chip-set">
+          <legend>Can send calls to <span class="quiet">(tick none = anywhere)</span></legend>
+          ${[...CALL_TARGETS, ...departments.filter((other) => other.id !== department.id).map((other) => [other.id, other.name || "New department"])].map(([id, label]) => `
+            <label class="chip-check"><input type="checkbox" name="pageTarget" value="${escapeText(id)}" ${(department.pageTargets || []).includes(id) ? "checked" : ""}><span>${escapeText(label)}</span></label>`).join("")}
         </fieldset>
       </div>
       <div class="dept-card-row">
@@ -309,6 +323,9 @@ function readDepartmentEdits() {
     department.cueColors = Array.from(card.querySelectorAll("[name=cueColor]:checked")).map((input) => input.value);
     department.cueTypes = Array.from(card.querySelectorAll("[name=cueType]:checked")).map((input) => input.value);
     department.permissions = Array.from(card.querySelectorAll("[name=permission]:checked")).map((input) => input.value);
+    department.pageTargets = department.permissions.includes("paging")
+      ? Array.from(card.querySelectorAll("[name=pageTarget]:checked")).map((input) => input.value)
+      : [];
     department.namePrefixes = card.querySelector("[name=prefixes]").value.split(",").map((value) => value.trim()).filter(Boolean);
     const password = card.querySelector("[name=password]").value;
     if (password) passwords[department.id] = password;

@@ -10,6 +10,7 @@ import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-own
 import {
   adminDepartmentList,
   stageManagerId,
+  departmentCueInfo,
   departmentCueMap,
   departmentView,
   login,
@@ -139,6 +140,9 @@ async function routeRequest(request, response) {
     if (!department) return sendJson(response, { error: "Please log in." }, 401);
     if (url.pathname === "/api/dept/me" && request.method === "GET") {
       return sendJson(response, departmentView(department));
+    }
+    if (url.pathname === "/api/dept/cue" && request.method === "GET") {
+      return sendJson(response, await departmentCueInfo(department, url.searchParams.get("cueId")));
     }
     if (url.pathname === "/api/dept/action" && request.method === "POST") {
       const result = await runDepartmentAction(department, await readBody(request));

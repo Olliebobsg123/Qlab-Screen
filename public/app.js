@@ -3,6 +3,7 @@ import {
   configuredDepartmentFilter,
   departmentOptionsHtml,
   loadConfiguredDepartments,
+  startLiveTimers,
   endingClass,
   filterCueList,
   filterRunning,
@@ -108,6 +109,7 @@ events.onerror = () => {
 pollState();
 setInterval(pollState, 2000);
 setInterval(renderClockAndPage, 1000);
+startLiveTimers(() => currentState);
 
 deptSelect.innerHTML = departmentOptionsHtml(cueFilter);
 deptSelect.addEventListener("change", () => applyDepartment(deptSelect.value));
@@ -363,6 +365,11 @@ function renderMobileGlance(state, currentGroup, updateTime) {
   mobileElapsed.textContent = `${formatTime(elapsed)} elapsed`;
   mobileRemaining.textContent = remaining == null ? "duration unavailable" : `${formatTime(remaining)} remaining`;
   mobileProgress.parentElement.dataset.ending = endingClass(remaining);
+  // The live timer loop keeps these counting smoothly between updates.
+  setLive(mobileElapsed, "elapsed", primary?.uniqueID, { suffix: " elapsed" });
+  setLive(mobileRemaining, "remaining", primary?.uniqueID, { suffix: " remaining", empty: "duration unavailable" });
+  setLive(mobileProgress, "progress", primary?.uniqueID);
+  setLive(mobileProgress.parentElement, "ending", primary?.uniqueID);
   mobileRunningCount.textContent = `${filterRunning(state.running || [], cueMap, cueFilter).length} running`;
   mobileWorkspace.textContent = state.workspaceName || "No workspace";
 }
@@ -516,18 +523,18 @@ function renderRunningCue(cue) {
   const notes = getCueNotes(currentState, cue.uniqueID);
 
   return `
-    <article class="run-card ${endingClass(remaining)}">
+    <article class="run-card ${endingClass(remaining)}" data-live="ending" data-cue="${escapeHtml(cue.uniqueID)}">
       <div class="run-top">
         <strong class="cue-number">${escapeHtml(cue.number || "-")}</strong>
         <div class="run-main">
           <strong class="run-title">${escapeHtml(displayName)}</strong>
           ${detail ? `<div class="run-detail">${escapeHtml(detail)}</div>` : ""}
         </div>
-        <span class="timer">${formatTime(elapsed)}</span>
+        <span class="timer" data-live="elapsed" data-cue="${escapeHtml(cue.uniqueID)}">${formatTime(elapsed)}</span>
       </div>
-      <div class="progress" aria-hidden="true"><span style="--progress:${progress}%"></span></div>
+      <div class="progress" aria-hidden="true"><span style="--progress:${progress}%" data-live="progress" data-cue="${escapeHtml(cue.uniqueID)}"></span></div>
       <div class="meta">
-        ${duration > 0 ? `${formatTime(remaining)} remaining of ${formatTime(duration)}` : "Duration unavailable"}
+        ${duration > 0 ? `<span data-live="remaining" data-cue="${escapeHtml(cue.uniqueID)}">${formatTime(remaining)}</span> remaining of ${formatTime(duration)}` : "Duration unavailable"}
         ${timing.paused ? " / paused" : ""}
       </div>
       ${notes ? `<p class="notes-text">${escapeHtml(notes)}</p>` : ""}
@@ -622,4 +629,16 @@ function sendPresence(visible) {
     body: payload,
     keepalive: true
   }).catch(() => {});
+}
+
+function setLive(element, kind, cueId, { suffix = "", empty } = {}) {
+  if (!cueId) {
+    delete element.dataset.live;
+    delete element.dataset.cue;
+    return;
+  }
+  element.dataset.live = kind;
+  element.dataset.cue = cueId;
+  if (suffix) element.dataset.suffix = suffix;
+  if (empty !== undefined) element.dataset.empty = empty;
 }

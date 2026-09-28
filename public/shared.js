@@ -278,3 +278,74 @@ export function cueLabel(cue) {
   if (!cue) return "";
   return cue.name || cue.listName || cue.type || "";
 }
+
+// --- Live timers: smooth elapsed/remaining/progress between server updates ---
+
+// QLab is read twice a second; in between, running cues are counted on from the time of the last
+// reading so clocks and progress bars move continuously.
+export function liveTiming(timing) {
+  if (!timing) return { elapsed: 0, duration: 0, remaining: null, progress: 0, paused: false };
+  const duration = Number(timing.duration || 0);
+  let elapsed = Number(timing.actionElapsed || 0);
+  if (timing.at && !timing.paused) {
+    // Cap the guess so a lost connection doesn't run the clock on forever.
+    elapsed += Math.min(Math.max(0, (serverNow() - timing.at) / 1000), 3);
+  }
+  if (duration > 0) elapsed = Math.min(elapsed, duration);
+  const remaining = duration > 0 ? Math.max(0, duration - elapsed) : null;
+  return {
+    elapsed,
+    duration,
+    remaining,
+    progress: duration > 0 ? Math.min(100, (elapsed / duration) * 100) : 0,
+    paused: Boolean(timing.paused)
+  };
+}
+
+export function formatTenths(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(value / 60);
+  const secs = Math.floor(value % 60);
+  const tenths = Math.floor((value % 1) * 10);
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenths}`;
+}
+
+export function formatShort(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  return `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}`;
+}
+
+// Elements opt in with data-live="elapsed|remaining|progress|ending" and data-cue="<id>".
+// Optional: data-format="short", data-prefix / data-suffix, data-empty (text when there's no duration).
+export function startLiveTimers(getState) {
+  let last = 0;
+  const tick = (now) => {
+    requestAnimationFrame(tick);
+    if (now - last < 50) return;
+    last = now;
+    const time = getState()?.time || {};
+    for (const element of document.querySelectorAll("[data-live][data-cue]")) {
+      const timing = time[element.dataset.cue];
+      if (!timing && element.dataset.live !== "ending") continue;
+      const live = liveTiming(timing);
+      const format = element.dataset.format === "short" ? formatShort : formatTenths;
+      const prefix = element.dataset.prefix || "";
+      const suffix = element.dataset.suffix || "";
+      if (element.dataset.live === "elapsed") {
+        element.textContent = `${prefix}${format(live.elapsed)}${suffix}`;
+      } else if (element.dataset.live === "remaining") {
+        element.textContent = live.remaining == null
+          ? (element.dataset.empty ?? "")
+          : `${prefix}${format(live.remaining)}${suffix}`;
+      } else if (element.dataset.live === "progress") {
+        element.style.width = `${live.progress}%`;
+      } else if (element.dataset.live === "ending") {
+        const ending = timing ? endingClass(live.remaining) : "";
+        element.dataset.ending = ending;
+        element.classList.toggle("ending-soon", ending === "ending-soon");
+        element.classList.toggle("ending-now", ending === "ending-now");
+      }
+    }
+  };
+  requestAnimationFrame(tick);
+}

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { SETTINGS_DIR, SETTINGS_PATH } from "./config.js";
 
 // Declared before loadSettings() runs below, which uses them.
-export const DEPARTMENT_PERMISSIONS = ["showGo", "transport", "anyCue", "paging", "showClock"];
+export const DEPARTMENT_PERMISSIONS = ["showGo", "transport", "anyCue", "paging", "showClock", "scrub"];
 const DEPARTMENT_COLORS = new Set(["red", "orange", "yellow", "green", "blue", "purple", "magenta", "gray", "none"]);
 
 let settings = await loadSettings();
@@ -138,6 +138,9 @@ function normalizeDepartment(saved) {
     role: saved.role === "stageManager" ? "stageManager" : "",
     // Extra powers beyond firing its own cues (see DEPARTMENT_PERMISSIONS).
     permissions: list(saved.permissions).filter((permission) => DEPARTMENT_PERMISSIONS.includes(permission)),
+    // Who this department may send backstage calls to ("all", "dashboard", "monitor" or department
+    // ids). Empty means anyone.
+    pageTargets: list(saved.pageTargets).slice(0, 40).map((target) => target.slice(0, 40)),
     passwordHash: String(saved.passwordHash || ""),
     passwordSalt: String(saved.passwordSalt || "")
   };
