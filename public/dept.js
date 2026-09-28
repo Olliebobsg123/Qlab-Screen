@@ -49,7 +49,6 @@ const standbyChoice = new Map(); // which cue the stage manager picked for each 
 let targetCues = new Map(); // department id → its cue ids (for the standby cue pickers)
 let targetCuesVersion = -1;
 let loadingTargetCues = false;
-let followedStandbyAt = null;
 const renderedHtml = new WeakMap();
 
 await loadView();
@@ -152,7 +151,6 @@ function render() {
   renderRunning(running, cueMap);
   renderSide(can);
   renderCues(cueMap, owned, runningIds, standbyIds, showAll);
-  followStandby();
   if (openCue) renderCuePanel();
   renderClock();
 }
@@ -185,13 +183,19 @@ function renderGoCards(cueMap) {
   const sources = sequenceMode
     ? (view.cueIds.length ? [{ id: "", name: "My cues", standbyId: state.deptNext?.[view.department.id] }] : [])
     : view.lists.map((list) => ({ ...list, standbyId: state.playheads?.[list.id] }));
+  const light = state.cueLights?.[view.department.id];
   setHtml($("#goCards"), sources.map((list) => {
     const standby = cueMap.get(list.standbyId);
     const notes = getCueNotes(state, standby?.uniqueID);
+    // A standby called for this exact cue: mark the card instead of popping anything up over GO.
+    const called = standby && light?.cueId === standby.uniqueID && ["standby", "ready"].includes(light.state);
     return `
-      <div class="panel go-card">
+      <div class="panel go-card ${called ? "called" : ""}">
         <div class="go-card-head">
-          <span class="eyebrow">${escapeHtml(list.name)} · next</span>
+          <div class="go-card-top">
+            <span class="eyebrow">${called ? `Standby from ${escapeHtml(light.by || "stage manager")}` : `${escapeHtml(list.name)} · next`}</span>
+            ${standby ? `<button type="button" class="tool-button small-button" data-open-cue="${escapeHtml(standby.uniqueID)}">Options</button>` : ""}
+          </div>
           <div class="go-next">
             <strong class="go-number">${escapeHtml(standby?.number || "–")}</strong>
             <strong class="go-name">${escapeHtml(standby ? cueName(standby) : "End of your cues")}</strong>
@@ -209,6 +213,8 @@ function renderGoCards(cueMap) {
 
 function renderRunning(running, cueMap) {
   const element = $("#deptRunning");
+  // Only take up space while something is playing.
+  $("#runningPanel").hidden = !running.length;
   element.classList.toggle("empty", !running.length);
   $("#stopAllButton").textContent = view.department.permissions?.includes("transport") ? "Stop all cues" : "Stop all my cues";
   setHtml(element, running.length
@@ -388,17 +394,6 @@ function setupStandbys() {
   });
 }
 
-// "Follow standbys": when the stage manager calls a standby for one of this department's cues,
-// open that cue ready to play (with its position bar), once per call.
-function followStandby() {
-  const light = state.cueLights?.[view?.department.id];
-  if (!view?.department.followStandby || light?.state !== "standby" || !light.cueId) return;
-  if (followedStandbyAt === light.at) return;
-  followedStandbyAt = light.at;
-  const owned = view.showAll || view.cueIds.includes(light.cueId);
-  if (owned && (state.cues || []).some((cue) => cue.uniqueID === light.cueId)) openCuePanel(light.cueId);
-}
-
 // --- Cue panel: start, standby, start from a point, pause, skip ---
 
 function setupCuePanel() {
@@ -531,6 +526,10 @@ function setupButtons() {
     if (!adminDept && tabLogin()) setTabLogin("");
     else if (!adminDept) await fetch("/api/logout", { method: "POST" });
     window.location.href = adminDept ? "/admin.html" : "/login.html";
+  });
+  $("#menuButton").addEventListener("click", () => {
+    const open = document.body.classList.toggle("nav-open");
+    $("#menuButton").setAttribute("aria-expanded", String(open));
   });
   $("#stopAllButton").addEventListener("click", () => act({ action: "stopAll" }, "Stopped"));
   $("#cueSearch").addEventListener("input", render);

@@ -15,11 +15,12 @@
           <span class="eyebrow" id="deptEyebrow">Department</span>
           <h1><span class="dept-dot" id="deptDot"></span><span id="deptName">Loading…</span></h1>
         </div>
-        <nav class="topnav" aria-label="Pages" data-nav></nav>
+        <nav id="deptNav" class="topnav" aria-label="Pages" data-nav></nav>
         <div class="topbar-actions">
           <span id="deptShowClock" class="status-chip show-clock" data-state="idle" hidden></span>
           <span id="deptQlab" class="status-chip" data-state="off">QLab</span>
           <button id="logoutButton" type="button" class="tool-button">Log out</button>
+          <button id="menuButton" type="button" class="tool-button menu-button" aria-expanded="false" aria-controls="deptNav">Menu</button>
         </div>
       </header>
 
@@ -59,7 +60,7 @@
           <!-- This department's own GO (its cue list, or its own cues in show order) -->
           <div id="goCards" class="go-cards"></div>
 
-          <div class="panel dept-panel">
+          <div id="runningPanel" class="panel dept-panel" hidden>
             <div class="panel-head">
               <h2>Running</h2>
               <button id="stopAllButton" type="button" class="danger-outline small-button">Stop all my cues</button>

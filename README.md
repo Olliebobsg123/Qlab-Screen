@@ -505,7 +505,7 @@ A Monitor or TV filtered to a department (`?dept=<id>`) shows that department's 
 
 ### Follow standbys
 
-Tick **Follow standbys** on a department in Admin → Departments. When the stage manager calls a standby for one of its cues, that cue becomes the department's next cue (its GO button fires it) and the cue opens on its screen, ready to play, with the position bar if it has the Start-from power. Departments with this on show "follows" in the Standbys tab.
+Tick **Follow standbys** on a department in Admin → Departments. When the stage manager calls a standby for one of its cues, that cue becomes the department's next cue, so its big GO fires it. The GO card turns amber and says who called the standby. Nothing pops up over the GO button: tap **Options** on the card for the cue's start-from bar, pause and stop. Departments with this on show "follows" in the Standbys tab.
 
 ## Testing mode
 

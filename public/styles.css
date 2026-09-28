@@ -3383,3 +3383,218 @@ body.focus-mode .topbar {
     grid-column: 1 / -1;
   }
 }
+
+/* --- Department page: compact layout (everything important without scrolling) --- */
+
+.menu-button {
+  display: none;
+}
+
+.go-card-top {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+}
+
+.go-card-top .small-button {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 0.8rem;
+}
+
+/* The stage manager called a standby for this card's next cue. */
+.go-card.called {
+  border-top-color: var(--warn);
+  box-shadow: 0 0 0 2px var(--warn) inset;
+}
+
+.go-card.called .go-card-top .eyebrow {
+  color: var(--warn);
+  font-weight: 800;
+}
+
+.dept-shell .show-card,
+.dept-shell .go-card {
+  gap: 10px;
+  padding: 14px;
+}
+
+.dept-shell #showGoBlock {
+  gap: 10px;
+}
+
+.dept-shell .show-go {
+  min-height: 120px;
+}
+
+.dept-shell .dept-go {
+  min-height: 112px;
+}
+
+.dept-shell .go-steps button,
+.dept-shell .transport-row button {
+  height: 42px;
+}
+
+.dept-shell .transport-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dept-shell .transport-row .panic-button {
+  grid-column: span 2;
+  order: 0;
+  height: 42px;
+}
+
+/* A keyboard shortcut is no use on a touch screen. */
+@media (pointer: coarse) {
+  .dept-keyboard {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .dept-shell .menu-button {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* One row: name on the left, status and buttons on the right. The page menu opens from "Menu". */
+  .dept-shell .topbar {
+    position: static;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+    margin-bottom: 10px;
+  }
+
+  .dept-shell .topbar-title {
+    flex: 1 1 auto;
+  }
+
+  .dept-shell .topbar-title .eyebrow {
+    font-size: 0.65rem;
+  }
+
+  .dept-shell .topbar-title h1 {
+    font-size: 1.15rem;
+  }
+
+  .dept-shell .topbar-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .dept-shell .topbar-actions .status-chip {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .dept-shell .topbar-actions .tool-button {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 0.85rem;
+  }
+
+  .dept-shell .topnav {
+    display: none;
+    order: 10;
+    width: 100%;
+  }
+
+  body.nav-open .dept-shell .topnav {
+    display: flex;
+  }
+
+  .dept-shell .notice {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .dept-grid,
+  .dept-main,
+  .go-cards,
+  .dept-side {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Row 1: name, Log out, Menu. Row 2: status chips. Row 3: the page menu when open. */
+  .dept-shell .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .dept-shell .topbar-actions {
+    display: contents;
+  }
+
+  .dept-shell .topbar-title { grid-area: 1 / 1; }
+  .dept-shell #logoutButton { grid-area: 1 / 2; }
+  .dept-shell #menuButton { grid-area: 1 / 3; }
+  .dept-shell #deptShowClock { grid-area: 2 / 1; justify-self: start; }
+  .dept-shell #deptQlab { grid-area: 2 / 2 / 3 / 4; justify-self: end; }
+  .dept-shell .topnav { grid-area: 3 / 1 / 4 / 4; }
+
+  .dept-shell .show-standby .go-next,
+  .dept-shell .go-next {
+    font-size: 1.25rem;
+  }
+
+  .dept-shell .show-go {
+    min-height: 104px;
+    font-size: 3.4rem;
+  }
+
+  .dept-shell .dept-go {
+    min-height: 100px;
+  }
+
+  .dept-shell .transport-row button {
+    height: 40px;
+    padding: 0 6px;
+    font-size: 0.85rem;
+  }
+
+  .dept-shell .notes-text {
+    font-size: 0.9rem;
+  }
+
+  .cue-light {
+    flex-wrap: nowrap;
+    padding: 10px 14px;
+    gap: 8px 12px;
+  }
+
+  .cue-light-text {
+    gap: 2px 10px;
+    min-width: 0;
+  }
+
+  .cue-light-by {
+    font-size: 0.8rem;
+  }
+
+  .cue-light-word {
+    font-size: 1.6rem;
+  }
+
+  .cue-light-cue {
+    font-size: 1.05rem;
+  }
+
+  .cue-light-ack {
+    flex: none;
+    height: 44px;
+    padding: 0 14px;
+    font-size: 0.95rem;
+  }
+}
