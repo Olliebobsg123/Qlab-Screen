@@ -1900,3 +1900,155 @@ a.tool-button {
 .manual-connect {
   margin-top: 10px;
 }
+
+/* --- MIDI page: status bar, tabs, folded help --- */
+
+.midi-status {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  margin-top: 14px;
+  padding: 12px 14px;
+}
+
+.midi-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.midi-chips .status-chip {
+  min-height: 32px;
+  font-size: 0.78rem;
+}
+
+.armed-switch {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.armed-switch input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--running);
+}
+
+.midi-status .midi-monitor {
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  height: 44px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.tab[aria-selected="true"] {
+  border-color: var(--line);
+  background: var(--panel-qlab);
+  color: var(--text);
+}
+
+.tab-panel {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-color: transparent;
+}
+
+.quiet {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.help-text.quiet:empty {
+  display: none;
+}
+
+.local-midi {
+  margin-top: 18px;
+}
+
+.local-midi-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.local-midi-head .subhead {
+  margin: 0;
+}
+
+.local-midi .midi-inputs.empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.local-midi a {
+  color: var(--warn);
+}
+
+.help-details {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.help-details summary {
+  color: var(--muted);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.help-details[open] summary {
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.settings-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.passthrough-panel {
+  margin-top: 18px;
+}
+
+.mappings-block {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.participant-name strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+#secureNotice {
+  margin-top: 14px;
+}
+
+/* One octave per row on wide screens. */
+@media (min-width: 820px) {
+  .pad-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+}

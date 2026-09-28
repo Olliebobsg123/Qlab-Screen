@@ -20,104 +20,69 @@
         </nav>
       </section>
 
-      <p id="secureNotice" class="notice" hidden></p>
       <p id="controlDisabledNotice" class="notice" hidden>
-        QLab control is turned off, so QLab actions from MIDI will be refused.
-        <a href="/admin.html">Turn on control in Admin</a>.
+        QLab control is turned off, so nothing is sent to QLab.
+        <a href="/admin.html">Turn it on in Admin</a>.
       </p>
 
-      <section class="panel admin-panel">
-        <div class="midi-status-row">
-          <div>
-            <span class="label">MIDI access</span>
-            <strong id="midiAccessStatus">Not started</strong>
-          </div>
-          <div>
-            <span class="label">QLab</span>
-            <strong id="qlabStatus">-</strong>
-          </div>
-          <label class="toggle-row armed-toggle">
+      <section class="panel midi-status" aria-label="Status">
+        <div class="midi-chips">
+          <span id="qlabStatus" class="status-chip" data-state="off">QLab: checking…</span>
+          <span id="midiOutputChip" class="status-chip" data-state="off">Output: checking…</span>
+          <span id="midiSocketStatus" class="status-chip" data-state="off">Link: connecting…</span>
+          <label class="armed-switch">
             <input id="armedToggle" type="checkbox" checked>
-            <span>Armed: MIDI on this device controls QLab</span>
-          </label>
-          <button id="midiStartButton" type="button">Connect MIDI devices</button>
-        </div>
-
-        <h2 class="section-title">What your MIDI does</h2>
-        <div class="mode-row" role="radiogroup" aria-label="MIDI mode">
-          <label class="mode-option">
-            <input type="radio" name="midiMode" value="passthrough" checked>
-            <span>
-              <strong>Pass straight through to QLab</strong>
-              <em>Every note, CC and program change is sent to QLab as MIDI, so the MIDI triggers already set up in your workspace fire.</em>
-            </span>
-          </label>
-          <label class="mode-option">
-            <input type="radio" name="midiMode" value="mappings">
-            <span>
-              <strong>Use mappings on this page</strong>
-              <em>Keys trigger GO, stop, panic and so on through OSC, without any MIDI setup in QLab.</em>
-            </span>
+            <span>Armed</span>
           </label>
         </div>
-
-        <div id="passthroughPanel" class="passthrough-panel">
-          <div class="token-row">
-            <label>
-              <span>QLab receives the MIDI from (MIDI output on the server)</span>
-              <select id="midiOutputSelect"></select>
-            </label>
-            <button id="midiOutputRefresh" type="button" class="secondary">Refresh</button>
-            <span id="midiSocketStatus" class="status-chip" data-state="off">Not connected</span>
-          </div>
-          <p id="midiOutputStatus" class="help-text"></p>
-        </div>
-
-        <h2 class="section-title">Inputs on this device</h2>
-        <div id="midiInputs" class="midi-inputs empty">No MIDI devices yet. Plug one in and press “Connect MIDI devices”.</div>
-
-        <h2 class="section-title">Last MIDI message</h2>
-        <div id="midiMonitor" class="midi-monitor">Press a key or move a control…</div>
+        <div id="midiMonitor" class="midi-monitor">Waiting for MIDI…</div>
       </section>
 
-      <section id="networkPanel" class="panel admin-panel">
+      <nav class="tabs" role="tablist" aria-label="MIDI sections">
+        <button type="button" role="tab" class="tab" data-tab="keyboard" aria-selected="true">Keyboard</button>
+        <button type="button" role="tab" class="tab" data-tab="pads" aria-selected="false">Pads</button>
+        <button type="button" role="tab" class="tab" data-tab="settings" aria-selected="false">Settings</button>
+      </nav>
+
+      <!-- Keyboard: devices on the network (iPhone etc.) and ones plugged into this device -->
+      <section id="tab-keyboard" class="panel admin-panel tab-panel" role="tabpanel">
         <div class="panel-head bare">
-          <h2>Keyboard on an iPhone or iPad</h2>
+          <h2>Keyboards</h2>
           <span id="networkState" class="status-chip" data-state="off">Checking…</span>
         </div>
-        <p class="help-text">
-          This server runs its own network MIDI session called <strong>QLab Connect</strong>.
-          Anything that plays into it goes straight to QLab's MIDI triggers. You don't need to set anything up on the Mac.
-        </p>
-        <ol class="steps">
-          <li>Plug the keyboard into the iPhone. On older iPhones use Apple's Lightning to USB 3 Camera Adapter with its charging port powered.</li>
-          <li>Install a free network MIDI app from the App Store, such as <strong>midimittr</strong>, open it, allow local network access, and turn its network session on (<strong>RTP</strong>, not Network MIDI 2.0).</li>
-          <li>Your phone appears under <strong>Devices on the network</strong> below. Press <strong>Connect</strong>. It reconnects by itself after that.</li>
-          <li>Play a key. The notes go to QLab.</li>
-        </ol>
 
-        <h3 class="subhead">Devices on the network</h3>
         <div id="networkDiscovered" class="network-participants">Looking for devices…</div>
-        <form id="networkManualForm" class="pad-send manual-connect">
-          <label>
-            <span>Or connect by address (e.g. 192.168.1.20:5004)</span>
-            <input name="address" autocomplete="off" inputmode="url" placeholder="iPhone IP address:port">
-          </label>
-          <button type="submit" class="secondary">Connect</button>
-        </form>
+        <p id="networkLast" class="help-text quiet"></p>
 
-        <h3 class="subhead">Connected</h3>
-        <div id="networkParticipants" class="network-participants">No devices connected yet.</div>
-        <p id="networkLast" class="help-text"></p>
-        <p id="networkManual" class="help-text"></p>
+        <div id="localMidi" class="local-midi">
+          <div class="local-midi-head">
+            <h3 class="subhead">Plugged into this device <span id="midiAccessStatus" class="quiet"></span></h3>
+            <button id="midiStartButton" type="button" class="secondary">Connect</button>
+          </div>
+          <div id="midiInputs" class="midi-inputs empty">Press Connect to use a keyboard plugged into this computer.</div>
+        </div>
+        <p id="secureNotice" class="help-text quiet" hidden></p>
+
+        <details class="help-details">
+          <summary>How to connect a keyboard through an iPhone</summary>
+          <ol class="steps">
+            <li>Plug the keyboard into the iPhone (older iPhones: Apple's Lightning to USB 3 Camera Adapter, with its charging port powered).</li>
+            <li>Open a network MIDI app such as <strong>midimittr</strong> and turn its network session on (<strong>RTP</strong>).</li>
+            <li>The phone appears in the list above. Press <strong>Connect</strong>. It reconnects by itself after that.</li>
+          </ol>
+          <form id="networkManualForm" class="pad-send manual-connect">
+            <label>
+              <span>Not listed? Connect by address</span>
+              <input name="address" autocomplete="off" inputmode="url" placeholder="192.168.1.20:5004">
+            </label>
+            <button type="submit" class="secondary">Connect</button>
+          </form>
+          <p id="networkManual" class="help-text quiet"></p>
+        </details>
       </section>
 
-      <section id="padsPanel" class="panel admin-panel">
-        <div class="panel-head bare">
-          <h2>On-screen MIDI pads</h2>
-          <span>Works on any phone or tablet, including iPhone</span>
-        </div>
-        <p class="help-text">Tap a pad to send that note to QLab, exactly as if you'd played it on a keyboard. Hold it down for a longer note.</p>
+      <!-- Pads: tap to send notes, for devices without a keyboard -->
+      <section id="tab-pads" class="panel admin-panel tab-panel" role="tabpanel" hidden>
         <div class="pad-controls">
           <label>
             <span>Channel</span>
@@ -137,69 +102,97 @@
           </div>
         </div>
         <div id="padGrid" class="pad-grid" aria-label="MIDI note pads"></div>
-        <div class="pad-extra">
-          <form id="programForm" class="pad-send">
-            <label>
-              <span>Program change</span>
-              <input name="program" type="number" min="0" max="127" value="0" inputmode="numeric">
-            </label>
-            <button type="submit" class="secondary">Send</button>
-          </form>
-          <form id="ccForm" class="pad-send">
-            <label>
-              <span>CC number</span>
-              <input name="cc" type="number" min="0" max="127" value="64" inputmode="numeric">
-            </label>
-            <label>
-              <span>Value</span>
-              <input name="value" type="number" min="0" max="127" value="127" inputmode="numeric">
-            </label>
-            <button type="submit" class="secondary">Send</button>
-          </form>
-        </div>
+        <details class="help-details">
+          <summary>Program change and CC</summary>
+          <div class="pad-extra">
+            <form id="programForm" class="pad-send">
+              <label>
+                <span>Program change</span>
+                <input name="program" type="number" min="0" max="127" value="0" inputmode="numeric">
+              </label>
+              <button type="submit" class="secondary">Send</button>
+            </form>
+            <form id="ccForm" class="pad-send">
+              <label>
+                <span>CC number</span>
+                <input name="cc" type="number" min="0" max="127" value="64" inputmode="numeric">
+              </label>
+              <label>
+                <span>Value</span>
+                <input name="value" type="number" min="0" max="127" value="127" inputmode="numeric">
+              </label>
+              <button type="submit" class="secondary">Send</button>
+            </form>
+          </div>
+        </details>
       </section>
 
-      <section id="mappingsPanel" class="panel admin-panel">
-        <div class="panel-head bare">
-          <h2>Mappings</h2>
-          <span>Saved on the server and shared by every MIDI device page</span>
+      <!-- Settings: what MIDI does, where it goes, and optional mappings -->
+      <section id="tab-settings" class="panel admin-panel tab-panel" role="tabpanel" hidden>
+        <h2 class="settings-title">What your MIDI does</h2>
+        <div class="mode-row" role="radiogroup" aria-label="MIDI mode">
+          <label class="mode-option">
+            <input type="radio" name="midiMode" value="passthrough" checked>
+            <span>
+              <strong>Pass straight through to QLab</strong>
+              <em>Notes go to QLab as MIDI, so your workspace's MIDI triggers fire.</em>
+            </span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="midiMode" value="mappings">
+            <span>
+              <strong>Use mappings</strong>
+              <em>Keys on this page's keyboard trigger GO, stop, panic and so on instead.</em>
+            </span>
+          </label>
         </div>
 
-        <form id="mappingForm" class="mapping-form">
-          <label>
-            <span>Action</span>
-            <select name="action" id="mappingAction"></select>
-          </label>
-          <label>
-            <span>Cue number / message</span>
-            <input name="arg" autocomplete="off" placeholder="Only for cue or page actions">
-          </label>
-          <label>
-            <span>MIDI message</span>
-            <select name="type">
-              <option value="note">Note on</option>
-              <option value="cc">Control change (value ≥ 64)</option>
-              <option value="program">Program change</option>
-            </select>
-          </label>
-          <label>
-            <span>Channel (0 = any)</span>
-            <input name="channel" type="number" min="0" max="16" value="0">
-          </label>
-          <label>
-            <span>Note / CC / program number</span>
-            <input name="number" type="number" min="0" max="127" value="60">
-          </label>
-          <div class="form-actions">
-            <button id="learnButton" type="button" class="secondary">Learn from MIDI</button>
-            <button type="submit">Add mapping</button>
+        <div id="passthroughPanel" class="passthrough-panel">
+          <div class="token-row">
+            <label>
+              <span>MIDI output QLab listens to</span>
+              <select id="midiOutputSelect"></select>
+            </label>
+            <button id="midiOutputRefresh" type="button" class="secondary">Refresh</button>
           </div>
-        </form>
-        <p id="mappingMessage" class="form-message" aria-live="polite"></p>
+          <p id="midiOutputStatus" class="help-text quiet"></p>
+        </div>
 
-        <div id="mappingList" class="mapping-list empty">No mappings yet.</div>
-        <div class="form-actions">
-          <button id="presetButton" type="button" class="secondary">Add starter keyboard layout</button>
+        <div id="mappingsPanel" class="mappings-block" hidden>
+          <h2 class="settings-title">Mappings</h2>
+          <form id="mappingForm" class="mapping-form">
+            <label>
+              <span>Action</span>
+              <select name="action" id="mappingAction"></select>
+            </label>
+            <label>
+              <span>Cue number / message</span>
+              <input name="arg" autocomplete="off" placeholder="Only for cue or page actions">
+            </label>
+            <label>
+              <span>MIDI message</span>
+              <select name="type">
+                <option value="note">Note on</option>
+                <option value="cc">Control change (value ≥ 64)</option>
+                <option value="program">Program change</option>
+              </select>
+            </label>
+            <label>
+              <span>Channel (0 = any)</span>
+              <input name="channel" type="number" min="0" max="16" value="0">
+            </label>
+            <label>
+              <span>Note / CC / program number</span>
+              <input name="number" type="number" min="0" max="127" value="60">
+            </label>
+            <div class="form-actions">
+              <button id="learnButton" type="button" class="secondary">Learn from MIDI</button>
+              <button type="submit">Add mapping</button>
+              <button id="presetButton" type="button" class="secondary">Add starter layout</button>
+            </div>
+          </form>
+          <p id="mappingMessage" class="form-message" aria-live="polite"></p>
+          <div id="mappingList" class="mapping-list empty">No mappings yet.</div>
         </div>
       </section>
     </main>

@@ -15,8 +15,9 @@ const learnButton = $("#learnButton");
 const mappingMessage = $("#mappingMessage");
 const mappingList = $("#mappingList");
 const passthroughPanel = $("#passthroughPanel");
-const padsPanel = $("#padsPanel");
-const networkPanel = $("#networkPanel");
+const localMidi = $("#localMidi");
+const outputChip = $("#midiOutputChip");
+const TAB_KEY = "qlab-midi-tab";
 const padGrid = $("#padGrid");
 const padChannel = $("#padChannel");
 const padVelocity = $("#padVelocity");
@@ -53,6 +54,7 @@ let mode = readStored(MODE_KEY, "passthrough");
 let controlToken = "";
 let socket = null;
 let socketRetry = null;
+let lastNetworkMessageAt = "";
 const ccValues = new Map();
 
 armedToggle.checked = readStored(ARMED_KEY, true);
@@ -95,9 +97,12 @@ mappingList.addEventListener("click", (event) => {
 });
 
 subscribeState("midi", (state, online) => {
-  qlabStatus.textContent = !online ? "Server offline" : (state.connected ? `Connected: ${state.workspaceName || ""}` : "Not connected");
+  setChip(qlabStatus, !online ? "off" : (state.connected ? "on" : "pending"),
+    !online ? "Server offline" : (state.connected ? `QLab: ${state.workspaceName || "connected"}` : "QLab: not connected"));
   disabledNotice.hidden = Boolean(state.controlEnabled);
 });
+
+setupTabs();
 
 await loadSettings();
 setupPads();
@@ -108,10 +113,27 @@ connectSocket();
 checkEnvironment();
 
 function applyMode() {
-  passthroughPanel.hidden = mode !== "passthrough";
-  padsPanel.hidden = mode !== "passthrough";
-  networkPanel.hidden = mode !== "passthrough";
   mappingsPanel.hidden = mode !== "mappings";
+}
+
+function setupTabs() {
+  const tabs = Array.from(document.querySelectorAll("[data-tab]"));
+  const show = (name) => {
+    for (const tab of tabs) {
+      const selected = tab.dataset.tab === name;
+      tab.setAttribute("aria-selected", String(selected));
+      $(`#tab-${tab.dataset.tab}`).hidden = !selected;
+    }
+    writeStored(TAB_KEY, name);
+  };
+  for (const tab of tabs) tab.addEventListener("click", () => show(tab.dataset.tab));
+  const saved = readStored(TAB_KEY, "keyboard");
+  show(tabs.some((tab) => tab.dataset.tab === saved) ? saved : "keyboard");
+}
+
+function setChip(element, state, text) {
+  element.dataset.state = state;
+  element.textContent = text;
 }
 
 // --- Pass-through: raw MIDI over a WebSocket to the server's MIDI output ---
@@ -120,15 +142,14 @@ function connectSocket() {
   clearTimeout(socketRetry);
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   socket = new WebSocket(`${protocol}//${location.host}/midi-ws?token=${encodeURIComponent(controlToken)}`);
-  setSocketStatus("pending", "Connecting…");
-  socket.onopen = () => setSocketStatus("on", "Live to server");
+  setSocketStatus("pending", "Link: connecting…");
+  socket.onopen = () => setSocketStatus("on", "Link: live");
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "error") monitor.textContent = `Not sent: ${message.error}`;
-    if (message.type === "status" && !message.open) setSocketStatus("pending", "Server has no MIDI output");
   };
   socket.onclose = () => {
-    setSocketStatus("off", "Reconnecting…");
+    setSocketStatus("off", "Link: reconnecting…");
     socketRetry = setTimeout(connectSocket, 2000);
   };
 }
@@ -158,54 +179,55 @@ async function saveOutput(port) {
   renderOutputs(await response.json());
 }
 
-function renderNetwork(network, outputOpen) {
+function renderNetwork(network) {
   if (!network) return;
-  const state = $("#networkState");
-  const people = network.participants || [];
-  if (!network.running) {
-    state.dataset.state = "off";
-    state.textContent = "Off";
-  } else if (people.length) {
-    state.dataset.state = "on";
-    state.textContent = `${people.length} connected`;
-  } else {
-    state.dataset.state = "pending";
-    state.textContent = "Waiting for a device";
-  }
-
-  $("#networkParticipants").innerHTML = people.length
-    ? people.map((person) => `<div class="participant"><strong>${escapeHtml(person.name)}</strong><span>${escapeHtml(person.address)}</span></div>`).join("")
-    : (network.running ? "No devices connected yet." : escapeHtml(network.error || "The network MIDI session isn't running."));
-
-  const last = network.lastMessage;
-  $("#networkLast").textContent = last
-    ? `Last from ${last.from || "device"}: ${describeRaw(last.bytes)} ${last.error ? `(not sent: ${last.error})` : "→ QLab"}`
-    : "";
-  if (!outputOpen && network.running) {
-    $("#networkLast").textContent += " The server has no MIDI output open, so nothing reaches QLab yet.";
-  }
-
-  const host = location.hostname;
-  $("#networkManual").textContent = network.running
-    ? `You can also connect from the app instead: pick “QLab Connect”, or add it by hand as ${host}, port ${network.port}.`
-    : "";
-
   const devices = network.discovered || [];
-  const stateLabels = { idle: "", connecting: "Connecting…", connected: "Connected", failed: "Failed", disconnected: "Reconnecting…" };
-  $("#networkDiscovered").innerHTML = devices.length
-    ? devices.map((device) => {
-      const connected = device.state === "connected" || device.state === "connecting" || device.auto;
+  const known = new Set(devices.map((device) => device.name));
+  // Devices that connected to us from their side (not in the discovered list).
+  const incoming = (network.participants || []).filter((person) => !known.has(person.name));
+  const connectedCount = devices.filter((device) => device.state === "connected").length + incoming.length;
+
+  if (!network.running) setChip($("#networkState"), "off", "Network MIDI off");
+  else if (connectedCount) setChip($("#networkState"), "on", `${connectedCount} connected`);
+  else setChip($("#networkState"), "pending", "None connected");
+
+  const stateLabels = { idle: "", connecting: "Connecting…", connected: "Connected", failed: "Couldn't connect", disconnected: "Reconnecting…" };
+  const rows = [
+    ...devices.map((device) => {
+      const active = device.state === "connected" || device.state === "connecting" || device.auto;
+      const offline = !device.visible && device.state !== "connected" && device.state !== "connecting";
+      const detail = [stateLabels[device.state], offline ? "not on the network right now" : "", device.error]
+        .filter(Boolean).join(" · ");
       return `<div class="participant discovered" data-state="${escapeHtml(device.state)}">
-        <span class="participant-name"><strong>${escapeHtml(device.name)}</strong>
-          <em>${escapeHtml(stateLabels[device.state] || "")}${device.visible ? "" : " (not visible right now)"}${device.error ? ` · ${escapeHtml(device.error)}` : ""}</em></span>
-        <button type="button" class="secondary" data-network-action="${connected ? "disconnect" : "connect"}" data-name="${escapeHtml(device.name)}">
-          ${connected ? "Disconnect" : "Connect"}
+        <span class="participant-name"><strong>${escapeHtml(device.name)}</strong>${detail ? `<em>${escapeHtml(detail)}</em>` : ""}</span>
+        <button type="button" class="secondary" data-network-action="${active ? "disconnect" : "connect"}" data-name="${escapeHtml(device.name)}">
+          ${active ? "Disconnect" : "Connect"}
         </button>
       </div>`;
-    }).join("")
-    : (network.discoverySupported
-      ? "No other network MIDI sessions found yet. Open midimittr on the iPhone and turn its network session on."
-      : "Automatic discovery needs the server to run on a Mac. Connect by address below.");
+    }),
+    ...incoming.map((person) => `<div class="participant discovered" data-state="connected">
+        <span class="participant-name"><strong>${escapeHtml(person.name)}</strong><em>Connected · joined from the device</em></span>
+      </div>`)
+  ];
+
+  $("#networkDiscovered").innerHTML = rows.length
+    ? rows.join("")
+    : escapeHtml(!network.running
+      ? (network.error || "The network MIDI session isn't running.")
+      : network.discoverySupported
+        ? "No keyboards found on the network yet. Open midimittr on the iPhone (see “How to connect” below)."
+        : "No keyboards connected. Use “Connect by address” below.");
+
+  // Network keyboards show in the same "last message" line as everything else.
+  const last = network.lastMessage;
+  if (last && last.at !== lastNetworkMessageAt) {
+    lastNetworkMessageAt = last.at;
+    monitor.textContent = `${last.from || "Network"} · ${describeRaw(last.bytes)} ${last.error ? `(not sent: ${last.error})` : "→ QLab"}`;
+  }
+
+  $("#networkManual").textContent = network.running
+    ? `Or connect from the app instead: pick “${network.sessionName}”, or add ${location.hostname} port ${network.port}.`
+    : "";
 }
 
 async function networkAction(action, name) {
@@ -217,13 +239,16 @@ async function networkAction(action, name) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     $("#networkLast").textContent = data.error || "Could not change the connection.";
+    loadOutputs();
     return;
   }
   loadOutputs();
 }
 
 function renderOutputs(status) {
-  renderNetwork(status.network, status.open);
+  renderNetwork(status.network);
+  if (status.open) setChip(outputChip, "on", `Output: ${status.selected === "virtual" ? status.virtualName : status.openName}`);
+  else setChip(outputChip, "off", "Output: not open");
   const options = [];
   if (status.virtualSupported) {
     options.push(["virtual", `Virtual port “${status.virtualName}” (QLab on the same Mac as this server)`]);
@@ -245,7 +270,7 @@ function renderOutputs(status) {
     outputStatus.textContent = status.error || "MIDI output isn't available on the server.";
   } else if (status.open) {
     outputStatus.textContent = status.selected === "virtual"
-      ? `Sending to “${status.openName}”. In QLab, open Workspace Settings → MIDI and make sure the “${status.virtualName}” device is enabled for MIDI triggers.`
+      ? `In QLab, make sure the “${status.virtualName}” MIDI device is enabled (Workspace Settings → MIDI).`
       : `Sending to “${status.openName}”.`;
   } else {
     outputStatus.textContent = status.error || "No MIDI output open.";
@@ -266,31 +291,25 @@ async function loadSettings() {
 }
 
 async function checkEnvironment() {
-  if (typeof navigator.requestMIDIAccess !== "function" || !window.isSecureContext) {
-    startButton.disabled = true;
-    if (typeof navigator.requestMIDIAccess !== "function") {
-      // Every iPhone/iPad browser (Chrome included) uses Safari's engine, which has no Web MIDI.
-      secureNotice.textContent = isIos
-        ? "iPhone and iPad browsers can't read a plugged-in MIDI keyboard (Apple doesn't allow Web MIDI, even in Chrome). Use the on-screen pads below: they send real MIDI to QLab."
-        : "This browser can't read MIDI devices. Use the on-screen pads below, or open this page in Chrome or Edge on a laptop to use a keyboard.";
-      // Nothing to connect on this device, so get the pads closer to the top.
-      startButton.hidden = true;
-      inputsEl.hidden = true;
-      inputsEl.previousElementSibling.hidden = true;
-      mode = "passthrough";
-      for (const radio of document.querySelectorAll("[name=midiMode]")) radio.checked = radio.value === mode;
-      applyMode();
-    } else if (!window.isSecureContext) {
-      const network = await fetch("/api/admin/network").then((response) => response.json()).catch(() => ({}));
-      const httpsUrl = network.httpsPort ? `https://${location.hostname}:${network.httpsPort}/midi.html` : "";
-      secureNotice.innerHTML = httpsUrl
-        ? `To use a plugged-in MIDI keyboard, open <a href="${escapeHtml(httpsUrl)}">${escapeHtml(httpsUrl)}</a> instead
-           (browsers only allow MIDI devices on secure pages; the first time, choose “Advanced” → “Proceed” on the certificate warning).
-           The on-screen pads below work on this page.`
-        : "Browsers only allow MIDI on secure (HTTPS) pages. Enable HTTPS on the server (HTTPS_PORT) and open this page over https://.";
-    }
+  if (typeof navigator.requestMIDIAccess !== "function") {
+    // Every iPhone/iPad browser (Chrome included) uses Safari's engine, which has no Web MIDI,
+    // so there's nothing to plug in here: keyboards reach QLab through the network list above.
+    localMidi.hidden = true;
+    secureNotice.textContent = isIos
+      ? "This iPhone's browser can't read a plugged-in keyboard directly. Connect it through the iPhone app instead (see below), or use the Pads tab."
+      : "This browser can't read plugged-in MIDI devices. Use Chrome or Edge, or the Pads tab.";
     secureNotice.hidden = false;
-    accessStatus.textContent = "Unavailable";
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    startButton.disabled = true;
+    const network = await fetch("/api/admin/network").then((response) => response.json()).catch(() => ({}));
+    const httpsUrl = network.httpsPort ? `https://${location.hostname}:${network.httpsPort}/midi.html` : "";
+    inputsEl.innerHTML = httpsUrl
+      ? `To use a keyboard plugged into this computer, open <a href="${escapeHtml(httpsUrl)}">the secure version of this page</a>
+         (on the certificate warning choose Advanced → Proceed).`
+      : "Keyboards plugged into this computer need this page opened over https://.";
     return;
   }
 
@@ -301,16 +320,14 @@ async function checkEnvironment() {
 
 async function startMidi() {
   try {
-    accessStatus.textContent = "Requesting…";
+    accessStatus.textContent = "";
     midiAccess = await navigator.requestMIDIAccess({ sysex: false });
-    accessStatus.textContent = "Connected";
-    startButton.textContent = "Refresh devices";
+    startButton.textContent = "Refresh";
     midiAccess.onstatechange = renderInputs;
     renderInputs();
   } catch (error) {
-    accessStatus.textContent = "Blocked";
-    secureNotice.textContent = `MIDI access was refused (${error.message}). Allow MIDI for this site in the browser's site settings, then reload.`;
-    secureNotice.hidden = false;
+    accessStatus.textContent = "";
+    inputsEl.textContent = `MIDI access was refused (${error.message}). Allow MIDI for this site in the browser's settings, then reload.`;
   }
 }
 
@@ -325,7 +342,7 @@ function renderInputs() {
           <input type="checkbox" data-input="${escapeHtml(input.id)}" ${disabledInputs.has(input.id) ? "" : "checked"}>
           <span>${escapeHtml(input.name || "MIDI input")}${input.manufacturer ? ` · ${escapeHtml(input.manufacturer)}` : ""}${input.state !== "connected" ? " (disconnected)" : ""}</span>
         </label>`).join("")
-    : "No MIDI inputs found. Plug in your keyboard, then press “Refresh devices”.";
+    : "No keyboard found. Plug one in, then press Refresh.";
 
   for (const checkbox of inputsEl.querySelectorAll("[data-input]")) {
     checkbox.addEventListener("change", () => {
