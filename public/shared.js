@@ -261,7 +261,7 @@ export async function sendControl(action, body = {}) {
 export function subscribeState(pageKind, onState) {
   let state = {};
   const clientId = `${pageKind}-${Math.random().toString(36).slice(2, 10)}`;
-  const events = new EventSource(`/events?clientId=${clientId}&page=${encodeURIComponent(pageKind)}`);
+  const events = openLiveEvents(pageKind, clientId);
   const merge = (patch) => {
     state = { ...state, ...patch, cues: patch.cues || state.cues || [] };
     syncServerTime(state);
@@ -348,4 +348,102 @@ export function startLiveTimers(getState) {
     }
   };
   requestAnimationFrame(tick);
+}
+
+// --- One live connection per browser, shared by every tab ---
+
+// Browsers allow only ~6 connections to one site, and each open page holds one for live updates,
+// so with several tabs open the newest ones would never update (or even load). Instead one tab
+// (the leader) keeps the live connection and relays every update to the others over a
+// BroadcastChannel. If the leader tab closes, another tab takes over automatically.
+const LIVE_TYPES = ["snapshot", "patch", "heartbeat", "meters"];
+const LIVE_CHANNEL = "qlab-connect-live";
+const FOLLOWER_STALE_MS = 25_000;
+
+// Works like an EventSource for /events: addEventListener(type, fn) with event.data, onopen, onerror.
+export function openLiveEvents(pageKind, clientId) {
+  const target = new EventTarget();
+  const api = {
+    onopen: null,
+    onerror: null,
+    addEventListener: (type, listener) => target.addEventListener(type, listener)
+  };
+  const emit = (type, data) => {
+    if (type === "open") return api.onopen?.();
+    if (type === "error") return api.onerror?.();
+    target.dispatchEvent(new MessageEvent(type, { data }));
+  };
+  const url = `/events?clientId=${encodeURIComponent(clientId)}&page=${encodeURIComponent(pageKind)}`;
+  const openDirect = (relay = () => {}) => {
+    const source = new EventSource(url);
+    source.onopen = () => {
+      emit("open");
+      relay("open");
+    };
+    source.onerror = () => {
+      emit("error");
+      relay("error");
+    };
+    for (const type of LIVE_TYPES) {
+      source.addEventListener(type, (event) => {
+        emit(type, event.data);
+        relay(type, event.data);
+      });
+    }
+    return source;
+  };
+
+  if (!("BroadcastChannel" in window) || typeof navigator.locks?.request !== "function") {
+    openDirect();
+    return api;
+  }
+
+  const channel = new BroadcastChannel(LIVE_CHANNEL);
+  let leader = false;
+  let direct = null;
+  let lastHeard = Date.now();
+  let latest = null; // the leader's merged state, handed to tabs that open later
+  let connected = false;
+
+  const relay = (type, data) => {
+    if (type === "snapshot") latest = JSON.parse(data);
+    else if ((type === "patch" || type === "heartbeat") && latest) latest = { ...latest, ...JSON.parse(data), cues: latest.cues };
+    channel.postMessage({ type, data });
+  };
+
+  channel.onmessage = (event) => {
+    const { type, data } = event.data || {};
+    if (type === "need-snapshot") {
+      if (leader && latest) channel.postMessage({ type: "snapshot", data: JSON.stringify(latest) });
+      return;
+    }
+    if (leader || direct) return;
+    lastHeard = Date.now();
+    if (type === "open" || type === "error") {
+      connected = type === "open";
+      emit(type);
+      return;
+    }
+    if (!connected) {
+      connected = true;
+      emit("open");
+    }
+    emit(type, data);
+  };
+
+  // Whoever holds the lock is the leader; it's released automatically when that tab closes.
+  navigator.locks.request(LIVE_CHANNEL, () => new Promise(() => {
+    leader = true;
+    if (!direct) direct = openDirect(relay);
+  }));
+
+  // Ask the current leader for the full state straight away.
+  channel.postMessage({ type: "need-snapshot" });
+
+  // Safety net: if the leader tab stops relaying (e.g. the browser froze it), connect directly.
+  setInterval(() => {
+    if (!leader && !direct && Date.now() - lastHeard > FOLLOWER_STALE_MS) direct = openDirect();
+  }, 5000);
+
+  return api;
 }

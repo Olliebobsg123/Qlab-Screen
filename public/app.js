@@ -3,6 +3,7 @@ import {
   configuredDepartmentFilter,
   departmentOptionsHtml,
   loadConfiguredDepartments,
+  openLiveEvents,
   startLiveTimers,
   endingClass,
   filterCueList,
@@ -71,7 +72,7 @@ const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const viewerClientId = getViewerClientId();
 
-const events = new EventSource(`/events?clientId=${encodeURIComponent(viewerClientId)}&page=${encodeURIComponent(VIEWER_PAGE)}`);
+const events = openLiveEvents(VIEWER_PAGE, viewerClientId);
 
 events.onopen = () => {
   eventsOnline = true;

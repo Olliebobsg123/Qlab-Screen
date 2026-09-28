@@ -37,7 +37,11 @@ export async function serveStatic(pathname, response) {
 
   try {
     const content = await readFile(filePath);
-    response.writeHead(200, { "Content-Type": MIME_TYPES[extname(filePath)] || "application/octet-stream" });
+    response.writeHead(200, {
+      "Content-Type": MIME_TYPES[extname(filePath)] || "application/octet-stream",
+      // Always check for the latest page code, so an update (git pull) shows up without a hard refresh.
+      "Cache-Control": "no-cache"
+    });
     response.end(content);
   } catch {
     response.writeHead(404);

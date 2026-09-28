@@ -6,6 +6,7 @@ import {
   getStandbyCue,
   configuredDepartmentFilter,
   loadConfiguredDepartments,
+  openLiveEvents,
   readCueFilter,
   startLiveTimers,
   renderPageOverlay,
@@ -64,7 +65,7 @@ setInterval(() => {
   if (lastMetersAt && Date.now() - lastMetersAt > METER_STALE_MS) tvMeters.hidden = true;
 }, 1000);
 
-const events = new EventSource(`/events?clientId=${encodeURIComponent(viewerClientId)}&page=${encodeURIComponent(VIEWER_PAGE)}`);
+const events = openLiveEvents(VIEWER_PAGE, viewerClientId);
 
 events.onopen = () => {
   eventsOnline = true;

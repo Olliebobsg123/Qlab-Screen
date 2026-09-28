@@ -50,22 +50,29 @@ subscribeState("department", (nextState, online) => {
   render();
 });
 setInterval(renderClock, 1000);
+// Also pick up changes made in Admin (e.g. which cue types this department runs).
+setInterval(() => loadView(), 10000);
 startLiveTimers(() => state);
 
 setupButtons();
 setupCuePanel();
 setupKeyboard();
 
+// Fetch which cues this department owns. The list changes whenever cues are added, deleted or
+// edited in QLab, and QLab often makes several changes in a row (add, then number, then name).
+// So note which version of the cue list was asked about, and ask again if it moved on meanwhile;
+// otherwise a change landing mid-request would be missed until the next one.
 async function loadView() {
   if (loadingView) return loadingView;
   loadingView = (async () => {
+    const requestedVersion = Number(state.cuesVersion ?? -1);
     const response = await fetch(withQuery("/api/dept/me"), { cache: "no-store" });
     if (response.status === 401) {
       window.location.href = "/login.html";
       return;
     }
     view = await response.json();
-    viewCuesVersion = Number(state.cuesVersion ?? -1);
+    viewCuesVersion = requestedVersion;
     const { department } = view;
     const isStageManager = department.role === "stageManager";
     document.title = `${department.name} · Cues`;
@@ -74,8 +81,11 @@ async function loadView() {
     document.documentElement.style.setProperty("--dept", COLORS[department.color] || COLORS.blue);
     buildPageTargets();
     render();
-  })().finally(() => {
+  })().catch(() => {
+    // Network hiccup: the next state update or the safety refresh tries again.
+  }).finally(() => {
     loadingView = null;
+    if (state.cuesVersion != null && Number(state.cuesVersion) !== viewCuesVersion) loadView();
   });
   return loadingView;
 }
