@@ -71,7 +71,7 @@
         <div class="dept-side">
           <nav id="sideTabs" class="tabs side-tabs" role="tablist" aria-label="Sections" hidden>
             <button type="button" role="tab" class="tab" data-side-tab="cues">Cues</button>
-            <button type="button" role="tab" class="tab" data-side-tab="lights">Lights</button>
+            <button type="button" role="tab" class="tab" data-side-tab="standbys">Standbys</button>
             <button type="button" role="tab" class="tab" data-side-tab="calls">Calls</button>
             <button type="button" role="tab" class="tab" data-side-tab="clock">Clock</button>
           </nav>
@@ -88,9 +88,9 @@
             <div id="deptCues" class="dept-cues empty">No cues yet.</div>
           </section>
 
-          <section id="side-lights" class="panel side-card side-panel" hidden>
+          <section id="side-standbys" class="panel side-card side-panel" hidden>
             <div class="side-card-head">
-              <h2>Cue lights</h2>
+              <h2>Standby calls</h2>
               <span class="eyebrow">Standby → they confirm → GO</span>
             </div>
             <div id="lightRows" class="light-rows"></div>
@@ -199,6 +199,7 @@
           </div>
 
           <div class="panel-actions">
+            <button type="button" id="panelAck" class="light-standby-button" hidden>Standing by</button>
             <button type="button" id="panelStart">Start</button>
             <button type="button" id="panelStartFrom" class="secondary" hidden>Start from here</button>
             <button type="button" id="panelPause" class="secondary" hidden>Pause</button>

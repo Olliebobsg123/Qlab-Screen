@@ -9,7 +9,7 @@ export function publicCueLights() {
 }
 
 // state: "standby" | "ready" | "go" | "clear". onChange is called when a GO clears itself.
-export function setCueLight(departmentId, lightState, { cue = "", by = "" } = {}, onChange = () => {}) {
+export function setCueLight(departmentId, lightState, { cue = "", cueId = "", by = "" } = {}, onChange = () => {}) {
   clearTimeout(goTimers.get(departmentId));
   goTimers.delete(departmentId);
   if (lightState === "clear") {
@@ -20,6 +20,8 @@ export function setCueLight(departmentId, lightState, { cue = "", by = "" } = {}
   const light = {
     state: lightState,
     cue: String(cue || previous?.cue || "").slice(0, 60),
+    // A new standby replaces the cue; answering or GO keeps the one it was for.
+    cueId: String(lightState === "standby" ? cueId : previous?.cueId || ""),
     by: String(by || previous?.by || "").slice(0, 40),
     at: Date.now()
   };

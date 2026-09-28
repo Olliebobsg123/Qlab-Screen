@@ -1,4 +1,5 @@
 import {
+  deptFetch,
   escapeHtml,
   formatTenths,
   getCueNotes,
@@ -7,7 +8,9 @@ import {
   renderPageOverlay,
   showClockInfo,
   startLiveTimers,
-  subscribeState
+  setTabLogin,
+  subscribeState,
+  tabLogin
 } from "/shared.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -40,8 +43,13 @@ let targetsBuilt = "";
 let openCue = null;
 let scrubbing = false;
 let sideTab = readStored(SIDE_TAB_KEY, "cues");
+if (sideTab === "lights") sideTab = "standbys"; // the tab's old name
 let allDepartments = [];
-const lightCueText = new Map(); // what the stage manager typed for each department's cue light
+const standbyChoice = new Map(); // which cue the stage manager picked for each department's standby
+let targetCues = new Map(); // department id → its cue ids (for the standby cue pickers)
+let targetCuesVersion = -1;
+let loadingTargetCues = false;
+let followedStandbyAt = null;
 const renderedHtml = new WeakMap();
 
 await loadView();
@@ -59,7 +67,7 @@ startLiveTimers(() => state);
 
 setupButtons();
 setupCuePanel();
-setupLights();
+setupStandbys();
 setupKeyboard();
 
 // Fetch which cues this department owns. The list changes whenever cues are added, deleted or
@@ -70,7 +78,7 @@ async function loadView() {
   if (loadingView) return loadingView;
   loadingView = (async () => {
     const requestedVersion = Number(state.cuesVersion ?? -1);
-    const response = await fetch(withQuery("/api/dept/me"), { cache: "no-store" });
+    const response = await deptFetch(withQuery("/api/dept/me"), { cache: "no-store" });
     if (response.status === 401) {
       window.location.href = "/login.html";
       return;
@@ -81,7 +89,7 @@ async function loadView() {
     const isStageManager = department.role === "stageManager";
     document.title = `${department.name} · Cues`;
     $("#deptName").textContent = department.name;
-    $("#deptEyebrow").textContent = `${isStageManager ? "Stage manager" : "Department"}${adminDept ? " (admin view)" : ""}`;
+    $("#deptEyebrow").textContent = `${isStageManager ? "Stage manager" : "Department"}${adminDept ? " (admin view)" : ""}${tabLogin() && !adminDept ? " · testing mode" : ""}`;
     document.documentElement.style.setProperty("--dept", COLORS[department.color] || COLORS.blue);
     buildPageTargets();
     render();
@@ -96,7 +104,7 @@ async function loadView() {
 
 async function act(body, label) {
   try {
-    const response = await fetch(withQuery("/api/dept/action"), {
+    const response = await deptFetch(withQuery("/api/dept/action"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -144,6 +152,7 @@ function render() {
   renderRunning(running, cueMap);
   renderSide(can);
   renderCues(cueMap, owned, runningIds, standbyIds, showAll);
+  followStandby();
   if (openCue) renderCuePanel();
   renderClock();
 }
@@ -222,15 +231,15 @@ function renderRunning(running, cueMap) {
 
 // The side column: cues, and (for departments with the powers) calls and the show clock as tabs.
 function renderSide(can) {
-  const available = ["cues", can("paging") && "lights", can("paging") && "calls", can("showClock") && "clock"].filter(Boolean);
+  const available = ["cues", can("paging") && "standbys", can("paging") && "calls", can("showClock") && "clock"].filter(Boolean);
   if (!available.includes(sideTab)) sideTab = "cues";
   $("#sideTabs").hidden = available.length < 2;
   for (const tab of document.querySelectorAll("[data-side-tab]")) {
     tab.hidden = !available.includes(tab.dataset.sideTab);
     tab.setAttribute("aria-selected", String(tab.dataset.sideTab === sideTab));
   }
-  for (const name of ["cues", "lights", "calls", "clock"]) $(`#side-${name}`).hidden = name !== sideTab;
-  if (sideTab === "lights") renderLights();
+  for (const name of ["cues", "standbys", "calls", "clock"]) $(`#side-${name}`).hidden = name !== sideTab;
+  if (sideTab === "standbys") renderStandbys();
   $("#pageStatus").textContent = state.page ? `Showing: “${state.page.text}”` : "No active call";
 }
 
@@ -303,9 +312,35 @@ async function buildPageTargets() {
     .map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join("");
 }
 
-// --- Cue lights (for departments with the backstage-calls power) ---
+// --- Standbys (cue lights) for departments with the backstage-calls power ---
+// Pick one of a department's cues and send it a standby; it answers "standing by"; then GO.
 
-function renderLights() {
+async function loadTargetCues() {
+  const version = Number(state.cuesVersion ?? -1);
+  if (targetCuesVersion === version || loadingTargetCues) return;
+  loadingTargetCues = true;
+  try {
+    const { departments = [] } = await fetch("/api/departments/cues", { cache: "no-store" }).then((response) => response.json());
+    targetCues = new Map(departments.map((department) => [department.id, department.cueIds || []]));
+    targetCuesVersion = version;
+    if (sideTab === "standbys") renderStandbys();
+  } catch {
+    // Tries again on the next render.
+  } finally {
+    loadingTargetCues = false;
+  }
+}
+
+// The cue a department is on now: its own next cue, or whichever of its cues is at a list playhead.
+function targetNextCue(departmentId, cueIds) {
+  const next = state.deptNext?.[departmentId];
+  if (next) return next;
+  const playheads = new Set(Object.values(state.playheads || {}));
+  return cueIds.find((id) => playheads.has(id)) || "";
+}
+
+function renderStandbys() {
+  loadTargetCues();
   const allowed = view.department.pageTargets || [];
   const targets = allDepartments.filter((department) =>
     department.id !== view.department.id && (!allowed.length || allowed.includes(department.id)));
@@ -314,42 +349,54 @@ function renderLights() {
   setHtml($("#lightRows"), targets.length
     ? targets.map((department) => {
       const light = state.cueLights?.[department.id];
-      const next = cueMap.get(state.deptNext?.[department.id]);
-      const suggestion = next ? `${next.number ? `${next.number} ` : ""}${cueName(next)}` : "";
+      const cueIds = (targetCues.get(department.id) || []).filter((cueId) => cueMap.has(cueId));
+      const chosen = standbyChoice.has(department.id) ? standbyChoice.get(department.id) : targetNextCue(department.id, cueIds);
       const id = escapeHtml(department.id);
+      const options = [`<option value="">No particular cue</option>`, ...cueIds.map((cueId) => {
+        const cue = cueMap.get(cueId);
+        return `<option value="${escapeHtml(cueId)}" ${cueId === chosen ? "selected" : ""}>${escapeHtml(`${cue.number ? `${cue.number} · ` : ""}${cueName(cue)}`)}</option>`;
+      })].join("");
       return `
         <div class="light-row" data-state="${escapeHtml(light?.state || "off")}">
-          <span class="light-name"><span class="dept-dot" style="--dept:${COLORS[department.color] || COLORS.blue}"></span>${escapeHtml(department.name)}</span>
+          <span class="light-name"><span class="dept-dot" style="--dept:${COLORS[department.color] || COLORS.blue}"></span>${escapeHtml(department.name)}${department.followStandby ? ' <span class="badge">follows</span>' : ""}</span>
           <span class="light-status">${escapeHtml(labels[light?.state] || "Off")}${light?.cue ? ` · ${escapeHtml(light.cue)}` : ""}</span>
           <span class="light-controls">
-            <input data-light-cue="${id}" value="${escapeHtml(lightCueText.get(department.id) ?? "")}" placeholder="${escapeHtml(suggestion || "Cue (optional)")}" data-suggestion="${escapeHtml(suggestion)}" aria-label="Cue for ${escapeHtml(department.name)}">
+            <select data-light-cue="${id}" aria-label="Cue for ${escapeHtml(department.name)}">${options}</select>
             <button type="button" class="light-standby-button" data-light="standby" data-target="${id}">Standby</button>
             <button type="button" class="light-go-button" data-light="go" data-target="${id}" ${light ? "" : "disabled"}>GO</button>
             <button type="button" class="secondary" data-light="clear" data-target="${id}" ${light ? "" : "disabled"} aria-label="Clear">✕</button>
           </span>
         </div>`;
     }).join("")
-    : `<p class="quiet">No departments to send cue lights to. Add departments in Admin, or allow this department to call them.</p>`);
+    : `<p class="quiet">No departments to send standbys to. Add departments in Admin, or allow this department to call them.</p>`);
 }
 
-function setupLights() {
-  $("#lightRows").addEventListener("input", (event) => {
-    const input = event.target.closest("[data-light-cue]");
-    if (input) lightCueText.set(input.dataset.lightCue, input.value);
+function setupStandbys() {
+  $("#lightRows").addEventListener("change", (event) => {
+    const select = event.target.closest("[data-light-cue]");
+    if (select) standbyChoice.set(select.dataset.lightCue, select.value);
   });
   $("#lightRows").addEventListener("click", (event) => {
     const button = event.target.closest("[data-light]");
     if (!button) return;
     const target = button.dataset.target;
-    const input = $(`[data-light-cue="${CSS.escape(target)}"]`);
-    const cue = input?.value.trim() || input?.dataset.suggestion || "";
+    const cueId = $(`[data-light-cue="${CSS.escape(target)}"]`)?.value || "";
     const labels = { standby: "Standby sent", go: "GO sent", clear: "Cleared" };
-    act({ action: "cueLight", target, light: button.dataset.light, cue }, labels[button.dataset.light]);
-    if (button.dataset.light !== "standby") {
-      lightCueText.delete(target);
-      if (input) input.value = "";
-    }
+    act({ action: "cueLight", target, light: button.dataset.light, cueId }, labels[button.dataset.light]);
+    // After a GO or clear, go back to suggesting the department's next cue.
+    if (button.dataset.light !== "standby") standbyChoice.delete(target);
   });
+}
+
+// "Follow standbys": when the stage manager calls a standby for one of this department's cues,
+// open that cue ready to play (with its position bar), once per call.
+function followStandby() {
+  const light = state.cueLights?.[view?.department.id];
+  if (!view?.department.followStandby || light?.state !== "standby" || !light.cueId) return;
+  if (followedStandbyAt === light.at) return;
+  followedStandbyAt = light.at;
+  const owned = view.showAll || view.cueIds.includes(light.cueId);
+  if (owned && (state.cues || []).some((cue) => cue.uniqueID === light.cueId)) openCuePanel(light.cueId);
 }
 
 // --- Cue panel: start, standby, start from a point, pause, skip ---
@@ -365,6 +412,7 @@ function setupCuePanel() {
     openCue = null;
   });
 
+  $("#panelAck").addEventListener("click", () => act({ action: "cueLightAck" }, "Standing by"));
   $("#panelStart").addEventListener("click", () => cueAction("start", "Started"));
   $("#panelStop").addEventListener("click", () => cueAction("stop", "Stopped"));
   $("#panelStandby").addEventListener("click", async () => {
@@ -414,7 +462,7 @@ async function openCuePanel(cueId) {
   const panel = $("#cuePanel");
   if (!panel.open) panel.showModal();
   try {
-    const response = await fetch(withQuery("/api/dept/cue", `cueId=${encodeURIComponent(cueId)}`), { cache: "no-store" });
+    const response = await deptFetch(withQuery("/api/dept/cue", `cueId=${encodeURIComponent(cueId)}`), { cache: "no-store" });
     const info = await response.json();
     if (openCue?.cueId === cueId && response.ok) {
       openCue = info;
@@ -434,7 +482,10 @@ function renderCuePanel() {
   const notes = getCueNotes(state, cue.uniqueID);
   const standbyIds = new Set(standbyCueIds(Boolean(view.showAll)));
 
-  $("#panelType").textContent = `${formatType(cue.type)}${standbyIds.has(cue.uniqueID) ? " · next" : ""}`;
+  const light = state.cueLights?.[view.department.id];
+  const called = light?.cueId === cue.uniqueID && ["standby", "ready"].includes(light.state);
+  $("#panelAck").hidden = !(called && light.state === "standby");
+  $("#panelType").textContent = `${formatType(cue.type)}${called ? ` · standby from ${light.by || "stage manager"}` : standbyIds.has(cue.uniqueID) ? " · next" : ""}`;
   $("#panelNumber").textContent = cue.number || "";
   $("#panelName").textContent = cueName(cue);
   $("#panelNotes").hidden = !notes;
@@ -476,7 +527,9 @@ function cueAction(action, label, extra = {}) {
 
 function setupButtons() {
   $("#logoutButton").addEventListener("click", async () => {
-    if (!adminDept) await fetch("/api/logout", { method: "POST" });
+    // A testing-mode tab only forgets its own login; otherwise sign this device out.
+    if (!adminDept && tabLogin()) setTabLogin("");
+    else if (!adminDept) await fetch("/api/logout", { method: "POST" });
     window.location.href = adminDept ? "/admin.html" : "/login.html";
   });
   $("#stopAllButton").addEventListener("click", () => act({ action: "stopAll" }, "Stopped"));

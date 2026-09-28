@@ -102,10 +102,11 @@ export async function updateDepartments(departments, passwords = {}) {
 export function loginDepartments() {
   return getDepartments()
     .filter((department) => department.passwordHash)
-    .map((department) => ({ id: department.id, name: department.name, color: department.color, role: department.role }));
+    .map((department) => ({ id: department.id, name: department.name, color: department.color, role: department.role, followStandby: department.followStandby }));
 }
 
 export function login(request, response, { departmentId, password }) {
+  const perTab = Boolean(getSettings().testingMode);
   const ip = getClientIp(request);
   const failures = (loginFailures.get(ip) || []).filter((at) => at > Date.now() - LOGIN_WINDOW_MS);
   if (failures.length >= LOGIN_MAX_FAILURES) throw httpError(429, "Too many attempts. Wait a minute and try again.");
@@ -122,9 +123,13 @@ export function login(request, response, { departmentId, password }) {
 
   const expires = Date.now() + SESSION_DAYS * 86_400_000;
   const payload = `${department.id}.${expires}.${department.passwordHash.slice(0, 12)}`;
-  const cookie = `${payload}.${sign(payload)}`;
-  response.setHeader("Set-Cookie", `${COOKIE}=${cookie}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}`);
-  return publicDepartment(department);
+  const token = `${payload}.${sign(payload)}`;
+  // In testing mode the login lives only in the tab that made it (the page sends it as a header);
+  // otherwise it's a cookie shared by the whole browser.
+  if (!perTab) {
+    response.setHeader("Set-Cookie", `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}`);
+  }
+  return { department: publicDepartment(department), token: perTab ? token : "", perTab };
 }
 
 export function logout(response) {
@@ -136,7 +141,9 @@ export function requestDepartment(request, url) {
   const asAdmin = url.searchParams.get("dept");
   if (asAdmin && hasAdminAuth(request)) return findDepartment(asAdmin);
 
-  const value = readCookie(request, COOKIE);
+  // In testing mode each browser tab has its own login (sent as a header), so the shared cookie is ignored.
+  const header = String(request.headers["x-dept-session"] || "");
+  const value = getSettings().testingMode ? header : header || readCookie(request, COOKIE);
   if (!value) return null;
   const parts = value.split(".");
   if (parts.length !== 4) return null;
@@ -407,8 +414,9 @@ function formatSeconds(seconds) {
 }
 
 // Standby / GO / clear another department's cue light. Uses the backstage-calls power and its
-// "can send calls to" limits.
-function runCueLightAction(department, body) {
+// "can send calls to" limits. A standby can name one of the target's cues; if the target has
+// "follow standbys" on, that cue becomes its next cue (and its page opens it, ready to play).
+async function runCueLightAction(department, body) {
   if (!department.permissions.includes("paging")) throw httpError(403, "Your department can't use cue lights.");
   const target = getDepartments().find((entry) => entry.id === String(body.target || ""));
   if (!target) throw httpError(404, "That department doesn't exist.");
@@ -417,7 +425,26 @@ function runCueLightAction(department, body) {
   }
   const light = String(body.light || "");
   if (!["standby", "go", "clear"].includes(light)) throw httpError(400, "Unknown cue light.");
-  setCueLight(target.id, light, { cue: body.cue, by: department.name }, broadcastPatch);
+
+  let cueId = "";
+  let cueText = String(body.cue || "");
+  if (light === "standby" && body.cueId) {
+    cueId = String(body.cueId);
+    if (!departmentCueIds(target).includes(cueId)) throw httpError(400, `That cue isn't one of ${target.name}'s cues.`);
+    const cue = state.cues.find((entry) => entry.uniqueID === cueId);
+    if (!cueText && cue) cueText = `${cue.number ? `${cue.number} ` : ""}${cue.name || cue.type || ""}`.trim();
+    if (target.followStandby) {
+      if (departmentMode(target) === "sequence") {
+        setCursor(target, cueId);
+      } else {
+        const cueMap = new Map(state.cues.map((entry) => [entry.uniqueID, entry]));
+        await setPlayhead(rootListId(cue, cueMap), cueId).catch((error) => {
+          console.warn(`Could not move ${target.name}'s playhead: ${error.message}`);
+        });
+      }
+    }
+  }
+  setCueLight(target.id, light, { cue: cueText, cueId, by: department.name }, broadcastPatch);
   if (light !== "clear") {
     const current = getCueLight(target.id);
     logEvent("cue-light", `${department.name} → ${target.name}: ${light === "go" ? "GO" : "standby"}${current?.cue ? ` ${current.cue}` : ""}`);
@@ -474,6 +501,7 @@ function publicDepartment(department) {
     cueTypes: department.cueTypes,
     namePrefixes: department.namePrefixes,
     role: department.role,
+    followStandby: department.followStandby,
     permissions: department.permissions,
     pageTargets: department.pageTargets
   };

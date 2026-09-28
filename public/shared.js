@@ -493,3 +493,30 @@ export function renderCueLightBanner(state, departmentId, { onAck } = {}) {
   if (light.state === "standby") navigator.vibrate?.(250);
   if (light.state === "go") navigator.vibrate?.([120, 60, 120]);
 }
+
+// Testing mode: each browser tab keeps its own department login (in sessionStorage, which is
+// per tab) and sends it with every department request, instead of sharing one cookie.
+const TAB_LOGIN_KEY = "qlab-dept-tab-login";
+
+export function tabLogin() {
+  try {
+    return sessionStorage.getItem(TAB_LOGIN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setTabLogin(token) {
+  try {
+    if (token) sessionStorage.setItem(TAB_LOGIN_KEY, token);
+    else sessionStorage.removeItem(TAB_LOGIN_KEY);
+  } catch {
+    // Storage blocked: falls back to the shared cookie.
+  }
+}
+
+export function deptFetch(path, options = {}) {
+  const token = tabLogin();
+  const headers = { ...(options.headers || {}), ...(token ? { "X-Dept-Session": token } : {}) };
+  return fetch(path, { ...options, headers });
+}

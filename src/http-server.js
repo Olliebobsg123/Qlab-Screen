@@ -120,7 +120,7 @@ async function routeRequest(request, response) {
   }
 
   if (url.pathname === "/api/departments" && request.method === "GET") {
-    return sendJson(response, { departments: loginDepartments() });
+    return sendJson(response, { departments: loginDepartments(), testingMode: getSettings().testingMode });
   }
 
   // Which cues each department owns, for the monitor/TV department filter (read-only).
@@ -130,7 +130,7 @@ async function routeRequest(request, response) {
 
   if (url.pathname === "/api/login" && request.method === "POST") {
     const body = await readBody(request);
-    return sendJson(response, { ok: true, department: login(request, response, body) });
+    return sendJson(response, { ok: true, ...login(request, response, body) });
   }
 
   if (url.pathname === "/api/logout" && request.method === "POST") {
@@ -165,8 +165,15 @@ async function routeRequest(request, response) {
       fromEnvironment: credentials.fromEnvironment,
       platform: process.platform,
       appDir: ROOT_DIR,
-      runningAsService: process.env.QLAB_CONNECT_SERVICE === "1"
+      runningAsService: process.env.QLAB_CONNECT_SERVICE === "1",
+      testingMode: getSettings().testingMode
     });
+  }
+
+  if (url.pathname === "/api/admin/testing-mode" && request.method === "POST") {
+    const body = await readBody(request);
+    await updateSettings({ ...getSettings(), testingMode: Boolean(body.enabled) });
+    return sendJson(response, { ok: true, testingMode: getSettings().testingMode });
   }
 
   if (url.pathname === "/api/admin/admin-login" && request.method === "POST") {

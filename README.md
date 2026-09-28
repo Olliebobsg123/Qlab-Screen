@@ -445,7 +445,7 @@ src/network.js            LAN addresses and QR codes
 src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
 src/midi-out.js           MIDI pass-through: WebSocket from the MIDI page to a MIDI output port
 src/departments.js        Department logins, cue ownership and department actions
-src/cuelights.js          Cue lights (standby / standing by / GO per department)
+src/cuelights.js          Standbys (standby / standing by / GO per department)
 src/qlab-check.js         "Check QLab" in Admin
 scripts/mac-service.sh    Run as a macOS background service (npm run mac:install)
 src/rtp-midi.js           Built-in network MIDI (RTP-MIDI) session "QLab Connect" for iPhones etc.
@@ -493,15 +493,23 @@ The **admin login** is saved in settings and can be changed any time in **Admin 
 
 Optionally, pick a cue to test with. It plays for a few seconds, so use a quiet or silent one. This checks starting part-way through, jumping while playing, pause/resume and stop. If this QLab can't jump a playing cue, the app switches to a backup method automatically: stop, move, restart, with a very short gap.
 
-## Cue lights
+## Standbys (cue lights)
 
-The Stage Manager, and any department with the **Backstage calls** power, has a **Lights** tab listing the departments it may signal. For each one:
+The Stage Manager, and any department with the **Backstage calls** power, has a **Standbys** tab listing the departments it may signal. It works for any kind of cue: sound, lighting, projection, anything. For each department:
 
-1. Type a cue, or leave it blank to use the department's next cue, and press **Standby**. That department's page shows a flashing amber **STANDBY** banner with the cue, and phones that support it vibrate.
+1. Pick one of that department's cues (it starts on the department's next cue) and press **Standby**. That department's page shows a flashing amber **STANDBY** banner with the cue, and phones that support it vibrate.
 2. The operator taps **Standing by**, and the Stage Manager sees "Standing by ✓".
-3. The Stage Manager presses **GO**. The banner flashes green, then clears itself after a few seconds. **✕** clears a light early.
+3. The Stage Manager presses **GO**. The banner flashes green, then clears itself after a few seconds. **✕** clears a standby early.
 
-A Monitor or TV filtered to a department (`?dept=<id>`) shows that department's cue lights too, without the button. Every standby, acknowledgement and GO is recorded in the show report. The "can send calls to" limits apply to cue lights as well.
+A Monitor or TV filtered to a department (`?dept=<id>`) shows that department's standbys too, without the button. Every standby, acknowledgement and GO is recorded in the show report. The "can send calls to" limits apply to standbys as well.
+
+### Follow standbys
+
+Tick **Follow standbys** on a department in Admin → Departments. When the stage manager calls a standby for one of its cues, that cue becomes the department's next cue (its GO button fires it) and the cue opens on its screen, ready to play, with the position bar if it has the Start-from power. Departments with this on show "follows" in the Standbys tab.
+
+## Testing mode
+
+Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.
 
 ## Ubuntu Service Install
 

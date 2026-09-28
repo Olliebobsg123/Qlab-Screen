@@ -265,6 +265,11 @@ function renderDepartments() {
             <label class="chip-check" title="${escapeText(help)}"><input type="checkbox" name="permission" value="${id}" ${(department.permissions || []).includes(id) ? "checked" : ""}><span>${escapeText(label)}</span></label>`).join("")}
         </fieldset>
       </div>
+      ${department.role === "stageManager" ? "" : `
+      <label class="toggle-row follow-standby">
+        <input type="checkbox" name="followStandby" ${department.followStandby ? "checked" : ""}>
+        <span><strong>Follow standbys</strong> <span class="quiet">When the stage manager calls a standby for one of its cues, that cue becomes its next cue and opens on its screen, ready to play.</span></span>
+      </label>`}
       <div class="dept-card-row call-targets" ${(department.permissions || []).includes("paging") ? "" : "hidden"}>
         <fieldset class="chip-set">
           <legend>Can send calls to <span class="quiet">(tick none = anywhere)</span></legend>
@@ -326,6 +331,7 @@ function readDepartmentEdits() {
     department.pageTargets = department.permissions.includes("paging")
       ? Array.from(card.querySelectorAll("[name=pageTarget]:checked")).map((input) => input.value)
       : [];
+    department.followStandby = Boolean(card.querySelector("[name=followStandby]")?.checked);
     department.namePrefixes = card.querySelector("[name=prefixes]").value.split(",").map((value) => value.trim()).filter(Boolean);
     const password = card.querySelector("[name=password]").value;
     if (password) passwords[department.id] = password;
@@ -506,6 +512,24 @@ function cueTypeOptions(department) {
 
 const adminLoginForm = document.querySelector("#adminLoginForm");
 const adminLoginMessage = document.querySelector("#adminLoginMessage");
+const testingToggle = document.querySelector("#testingMode");
+
+testingToggle.addEventListener("change", async () => {
+  const message = document.querySelector("#testingMessage");
+  const response = await fetch("/api/admin/testing-mode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: testingToggle.checked })
+  }).catch(() => null);
+  if (!response?.ok) {
+    testingToggle.checked = !testingToggle.checked;
+    message.textContent = "Could not change testing mode.";
+    return;
+  }
+  message.textContent = testingToggle.checked
+    ? "On. Log in again in each tab: every tab now has its own department login."
+    : "Off. Department logins are shared by the whole browser again; log in again on each device.";
+});
 
 loadServerInfo();
 
@@ -518,6 +542,7 @@ async function loadServerInfo() {
     for (const element of adminLoginForm.elements) element.disabled = true;
     adminLoginMessage.textContent = "The admin login is set by ADMIN_USER / ADMIN_PASSWORD when the app starts, so it can't be changed here.";
   }
+  testingToggle.checked = Boolean(info.testingMode);
   document.querySelector("#serviceStatus").textContent = info.runningAsService
     ? "✓ Running as a background service. It will start by itself after a restart."
     : info.platform === "darwin"

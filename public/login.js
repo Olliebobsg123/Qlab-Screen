@@ -1,4 +1,4 @@
-import { escapeHtml } from "/shared.js";
+import { deptFetch, escapeHtml, setTabLogin } from "/shared.js";
 
 const buttons = document.querySelector("#deptButtons");
 const form = document.querySelector("#loginForm");
@@ -30,6 +30,8 @@ form.addEventListener("submit", async (event) => {
     form.elements.password.select();
     return;
   }
+  // Testing mode: this login belongs to this tab only.
+  setTabLogin(data.perTab ? data.token : "");
   try {
     localStorage.setItem(LAST_KEY, selected);
   } catch {
@@ -39,7 +41,8 @@ form.addEventListener("submit", async (event) => {
 });
 
 async function loadDepartments() {
-  const { departments = [] } = await fetch("/api/departments").then((response) => response.json()).catch(() => ({}));
+  const { departments = [], testingMode = false } = await fetch("/api/departments").then((response) => response.json()).catch(() => ({}));
+  document.querySelector("#testingNotice").hidden = !testingMode;
   if (!departments.length) {
     buttons.innerHTML = `<p class="quiet">No departments have been set up yet. The admin can add them in <a href="/admin.html">Admin → Departments</a>.</p>`;
     return;
@@ -72,7 +75,7 @@ function select(id, name) {
 }
 
 async function checkExistingLogin() {
-  const response = await fetch("/api/dept/me", { cache: "no-store" });
+  const response = await deptFetch("/api/dept/me", { cache: "no-store" });
   if (!response.ok) return;
   const data = await response.json();
   document.querySelector("#continueName").textContent = data.department.name;

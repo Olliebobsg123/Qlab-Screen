@@ -127,6 +127,9 @@ function normalizeSettings(saved) {
       seek: saved.qlabCaps?.seek === "restart" ? "restart" : "direct",
       checkedAt: String(saved.qlabCaps?.checkedAt || "")
     },
+    // Testing mode: each browser tab logs in to a department separately (for trying several
+    // departments on one computer). Normally a login is shared by the whole browser.
+    testingMode: Boolean(saved.testingMode),
     departments: Array.isArray(saved.departments) ? saved.departments.map(normalizeDepartment).filter(Boolean).slice(0, 24) : [],
     // Signs department login cookies; kept so a server restart doesn't log everyone out.
     sessionSecret: String(saved.sessionSecret || "") || randomBytes(32).toString("hex"),
@@ -155,6 +158,9 @@ function normalizeDepartment(saved) {
     namePrefixes: list(saved.namePrefixes).slice(0, 10).map((prefix) => prefix.slice(0, 20)),
     // "stageManager" marks the built-in Stage Manager department (always exists, can't be removed).
     role: saved.role === "stageManager" ? "stageManager" : "",
+    // When the stage manager sends this department a standby for one of its cues, move its next
+    // cue there and open that cue ready to play.
+    followStandby: Boolean(saved.followStandby),
     // Extra powers beyond firing its own cues (see DEPARTMENT_PERMISSIONS).
     permissions: list(saved.permissions).filter((permission) => DEPARTMENT_PERMISSIONS.includes(permission)),
     // Who this department may send backstage calls to ("all", "dashboard", "monitor" or department
