@@ -51,7 +51,8 @@ The app connects to QLab over TCP OSC, reads cue information, watches what is ru
 - Admin settings: `http://localhost:3030/admin.html`
 - TV dashboard: `http://localhost:3030/dashboard.html`
 - Live viewers: `http://localhost:3030/viewers.html`
-- Stage manager control: `http://localhost:3030/control.html`
+- Start page: `http://localhost:3030/start.html`
+- Departments (including the Stage Manager): `http://localhost:3030/login.html`
 - MIDI control: `https://localhost:3443/midi.html` (must be HTTPS, see below)
 - Show report: `http://localhost:3030/report.html`
 - Audio meter source: `https://localhost:3443/meter-source.html`
@@ -190,19 +191,36 @@ The monitor and TV department dropdown lists the departments set up in Admin, us
 
 The app shows **one QLab workspace**. If some cues (video, mic, camera and so on) never appear, check the summary under the connection settings in **Admin**. It lists every cue list the app receives and how many cues of each type it holds, and warns if other workspaces are open in QLab. Choose the right one under **Workspace** and press **Connect Saved**.
 
-### Remote control
+### Stage Manager
 
-1. In QLab, give the passcode **control** access.
-2. In **Admin → QLab control**, tick **Allow QLab control from this server**.
-3. Open `/control.html`. It has a big GO button, Previous/Next playhead, Pause/Resume/Stop all, **hold to panic**, hard stop (with confirmation), and start or standby a cue by number.
+There's no separate control page any more. The **Stage Manager** is a department that's created automatically, and you can edit it in **Admin → Departments** but not remove it. Give it a password there, and your stage manager logs in at `/login.html` like everyone else. (`/control.html` now opens the Stage Manager page for the admin.)
+
+Its page has:
+
+- a big **show GO** with the standby cue and its notes, plus Previous/Next
+- **Pause, Resume and Stop all**, a **hold-to-panic** button and **Hard stop** (with a confirmation)
+- **start or stand by any cue by number**
+- the **whole show's cue list**, grouped by cue list, with Start, Stop and Standby on every cue
+- the **show clock** (start/end show, intervals with a countdown)
+- **backstage calls**: presets or a typed message, to every screen, TVs, monitors or one department
+
+What makes this the Stage Manager is a set of **powers**. Every department card in Admin has them, so any department can be given some:
+
+| Power | What it allows |
+| --- | --- |
+| Show GO | GO, next and previous for the whole show |
+| Stop & panic | Pause, resume, stop all, panic, hard stop |
+| Any cue | See the whole show; start, stop or stand by any cue |
+| Backstage calls | Send calls to screens |
+| Show clock | Start and end the show and intervals |
 
 Safety measures:
 
-- Control is off by default.
-- GO presses within 350 ms of each other count as one.
+- Nothing fires unless **QLab control** is on (Admin → Control) and the QLab passcode has control access.
+- GO presses within 350 ms count as one.
 - Panic needs a press-and-hold.
-- Every remote command is recorded in the show report.
-- Keyboard shortcuts (Space = GO, Esc = Panic) are opt-in on each device.
+- Every action is recorded in the show report with the department's name.
+- Space = GO is opt-in on each device.
 
 ### MIDI keyboards on any device
 

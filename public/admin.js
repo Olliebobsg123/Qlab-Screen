@@ -153,7 +153,7 @@ async function loadNetwork() {
   const pages = [
     ["Monitor", (url) => `${url.http}/`],
     ["TV dashboard", (url) => `${url.http}/dashboard.html`],
-    ["Control", (url) => `${url.http}/control.html`],
+    ["Departments", (url) => `${url.http}/login.html`],
     ["MIDI (HTTPS)", (url) => url.https ? `${url.https}/midi.html` : ""]
   ];
 
@@ -191,13 +191,20 @@ const QLAB_CUE_TYPES = [
   "Group", "Start", "Stop", "Pause", "Load", "Reset", "Devamp", "GoTo", "Target", "Arm", "Disarm", "Wait", "Memo", "Script"
 ];
 let typeCounts = {};
+const PERMISSIONS = [
+  ["showGo", "Show GO", "GO, next and previous for the whole show"],
+  ["transport", "Stop & panic", "Pause, resume, stop all, panic and hard stop"],
+  ["anyCue", "Any cue", "See the whole show and start, stop or standby any cue"],
+  ["paging", "Backstage calls", "Send calls to screens"],
+  ["showClock", "Show clock", "Start and end the show and intervals"]
+];
 let departments = [];
 let cueListOptions = [];
 
 loadDepartments();
 document.querySelector("#addDeptButton").addEventListener("click", () => {
   readDepartmentEdits();
-  departments.push({ id: `dept${Date.now().toString(36)}`, name: "", color: DEPT_COLORS[departments.length % DEPT_COLORS.length], cueListIds: [], cueTypes: [], cueColors: [], namePrefixes: [], hasPassword: false, isNew: true });
+  departments.push({ id: `dept${Date.now().toString(36)}`, name: "", color: DEPT_COLORS[departments.length % DEPT_COLORS.length], cueListIds: [], cueTypes: [], cueColors: [], namePrefixes: [], permissions: [], hasPassword: false, isNew: true });
   renderDepartments();
   deptEditor.querySelector(".dept-card:last-child input[name=name]")?.focus();
 });
@@ -226,7 +233,8 @@ function renderDepartments() {
     return;
   }
   deptEditor.innerHTML = departments.map((department) => `
-    <div class="dept-card" data-dept-id="${escapeText(department.id)}">
+    <div class="dept-card ${department.role === "stageManager" ? "is-stage-manager" : ""}" data-dept-id="${escapeText(department.id)}">
+      ${department.role === "stageManager" ? `<div class="dept-card-badge">Built in · runs the whole show${department.hasPassword ? "" : " · <strong>set a password so your stage manager can log in</strong>"}</div>` : ""}
       <div class="dept-card-row">
         <label class="grow">
           <span>Name</span>
@@ -245,7 +253,14 @@ function renderDepartments() {
       </div>
       <div class="dept-card-row">
         <fieldset class="chip-set">
-          <legend>Cue types <span class="quiet">(numbers = how many are in this show)</span></legend>
+          <legend>Powers <span class="quiet">(on top of firing its own cues)</span></legend>
+          ${PERMISSIONS.map(([id, label, help]) => `
+            <label class="chip-check" title="${escapeText(help)}"><input type="checkbox" name="permission" value="${id}" ${(department.permissions || []).includes(id) ? "checked" : ""}><span>${escapeText(label)}</span></label>`).join("")}
+        </fieldset>
+      </div>
+      <div class="dept-card-row">
+        <fieldset class="chip-set">
+          <legend>Cue types it runs <span class="quiet">(numbers = how many are in this show)</span></legend>
           ${cueTypeOptions(department).map((type) => `
             <label class="chip-check ${typeCounts[type] ? "" : "chip-unused"}"><input type="checkbox" name="cueType" value="${escapeText(type)}" ${(department.cueTypes || []).includes(type) ? "checked" : ""}><span>${escapeText(type)}${typeCounts[type] ? ` <b>${typeCounts[type]}</b>` : ""}</span></label>`).join("")}
         </fieldset>
@@ -277,7 +292,7 @@ function renderDepartments() {
       </details>
       <div class="dept-card-actions">
         ${department.isNew ? "" : `<a class="tool-button" href="/dept.html?dept=${encodeURIComponent(department.id)}" target="_blank" rel="noopener">Open as admin</a>`}
-        <button type="button" class="danger-outline small-button" data-remove-dept="${escapeText(department.id)}">Remove</button>
+        ${department.role === "stageManager" ? "" : `<button type="button" class="danger-outline small-button" data-remove-dept="${escapeText(department.id)}">Remove</button>`}
       </div>
     </div>`).join("");
 }
@@ -293,6 +308,7 @@ function readDepartmentEdits() {
     department.cueListIds = Array.from(card.querySelectorAll("[name=list]:checked")).map((input) => input.value);
     department.cueColors = Array.from(card.querySelectorAll("[name=cueColor]:checked")).map((input) => input.value);
     department.cueTypes = Array.from(card.querySelectorAll("[name=cueType]:checked")).map((input) => input.value);
+    department.permissions = Array.from(card.querySelectorAll("[name=permission]:checked")).map((input) => input.value);
     department.namePrefixes = card.querySelector("[name=prefixes]").value.split(",").map((value) => value.trim()).filter(Boolean);
     const password = card.querySelector("[name=password]").value;
     if (password) passwords[department.id] = password;
@@ -308,7 +324,7 @@ async function saveDepartments() {
     deptMessage.textContent = "Every department needs a name.";
     return;
   }
-  const noPassword = departments.find((department) => !department.hasPassword && !passwords[department.id]);
+  const noPassword = departments.find((department) => department.role !== "stageManager" && !department.hasPassword && !passwords[department.id]);
   if (noPassword) {
     deptMessage.textContent = `Set a password for ${noPassword.name}.`;
     return;

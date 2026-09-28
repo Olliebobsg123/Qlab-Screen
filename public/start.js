@@ -12,7 +12,10 @@ const [status, departments] = await Promise.all([
 
 mark("stepQlab", status.connected, status.connected ? `Connected to ${status.workspaceName}.` : "");
 mark("stepControl", status.controlEnabled, status.controlEnabled ? "Control is on." : "");
-const count = departments.departments?.length || 0;
+const list = departments.departments || [];
+const stageManager = list.find((department) => department.role === "stageManager");
+mark("stepStageManager", Boolean(stageManager), stageManager ? "The Stage Manager can log in." : "");
+const count = list.filter((department) => department.role !== "stageManager").length;
 mark("stepDepartments", count > 0, count ? `${count} department${count === 1 ? "" : "s"} set up.` : "");
 let backedUp = false;
 try {

@@ -9,6 +9,7 @@ import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
 import {
   adminDepartmentList,
+  stageManagerId,
   departmentCueMap,
   departmentView,
   login,
@@ -106,6 +107,12 @@ async function routeRequest(request, response) {
 
   if (url.pathname === "/api/presence" && request.method === "POST") {
     return handlePresence(request, response);
+  }
+
+  // The old Control page is now the Stage Manager department (admin view; admin login checked above).
+  if (url.pathname === "/control.html") {
+    response.writeHead(302, { Location: `/dept.html?dept=${encodeURIComponent(stageManagerId())}` });
+    return response.end();
   }
 
   if (url.pathname === "/api/departments" && request.method === "GET") {

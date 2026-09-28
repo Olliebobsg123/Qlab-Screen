@@ -6,7 +6,6 @@ const ADMIN_PAGES = new Set([
   "/viewers.html",
   "/viewers.js",
   "/control.html",
-  "/control.js",
   "/midi.html",
   "/midi.js",
   "/report.html",

@@ -27,6 +27,43 @@
 
       <section class="dept-grid">
         <div class="dept-main">
+          <!-- Show-wide controls, for departments with those powers (the Stage Manager has them all) -->
+          <section id="showCard" class="panel show-card" hidden>
+            <div id="showGoBlock">
+              <div class="show-standby">
+                <span class="eyebrow">Standby · next GO</span>
+                <div class="go-next">
+                  <strong class="go-number" id="showNumber">–</strong>
+                  <strong class="go-name" id="showName">Waiting for QLab</strong>
+                </div>
+                <p id="showNotes" class="notes-text" hidden></p>
+              </div>
+              <button id="showGo" type="button" class="go-button show-go" data-show="go">GO</button>
+              <div class="go-steps">
+                <button type="button" class="secondary" data-show="previous">◀ Previous</button>
+                <button type="button" class="secondary" data-show="next">Next ▶</button>
+              </div>
+            </div>
+            <div id="transportBlock" class="transport-row">
+              <button type="button" class="secondary" data-show="pause">Pause all</button>
+              <button type="button" class="secondary" data-show="resume">Resume all</button>
+              <button type="button" class="secondary" data-show="stop">Stop all</button>
+              <button id="panicButton" type="button" class="panic-button">
+                <span class="hold-fill" aria-hidden="true"></span>
+                <span class="hold-label">Hold for panic</span>
+              </button>
+              <button id="hardStopButton" type="button" class="danger-outline">Hard stop</button>
+            </div>
+            <form id="cueNumberForm" class="cue-form">
+              <label>
+                <span>Cue number</span>
+                <input name="cue" autocomplete="off" placeholder="e.g. 42" required>
+              </label>
+              <button type="submit" class="secondary" data-cue-action="startCue">Start</button>
+              <button type="submit" class="secondary" data-cue-action="standby">Standby</button>
+            </form>
+          </section>
+
           <div id="goCards" class="go-cards"></div>
 
           <div class="panel dept-panel">
@@ -38,12 +75,79 @@
           </div>
         </div>
 
-        <div class="panel dept-panel dept-cues-panel">
-          <div class="panel-head">
-            <h2>My cues</h2>
-            <span id="deptCueCount">0 cues</span>
+        <div class="dept-side">
+          <section id="clockCard" class="panel side-card" hidden>
+            <div class="side-card-head">
+              <h2>Show clock</h2>
+              <span id="clockLabel" class="eyebrow">Not started</span>
+            </div>
+            <div id="clockValue" class="clock-big" data-state="idle">--:--</div>
+            <div class="side-buttons">
+              <button type="button" class="secondary" data-show="showStart">Start show</button>
+              <button type="button" class="secondary" data-show="showEnd">End show</button>
+            </div>
+            <div class="interval-row">
+              <label>
+                <span>Interval (min)</span>
+                <input id="intervalMinutes" type="number" min="0" max="180" value="20" inputmode="numeric">
+              </label>
+              <button id="intervalStartButton" type="button" class="secondary">Start interval</button>
+              <button type="button" class="secondary" data-show="intervalEnd">End</button>
+            </div>
+          </section>
+
+          <section id="pagingCard" class="panel side-card" hidden>
+            <div class="side-card-head">
+              <h2>Backstage calls</h2>
+              <span id="pageStatus" class="eyebrow">No active call</span>
+            </div>
+            <div class="page-presets">
+              <button type="button" class="secondary" data-page="Beginners to the stage please">Beginners</button>
+              <button type="button" class="secondary" data-page="Places please">Places</button>
+              <button type="button" class="secondary" data-page="5 minutes please">5 minutes</button>
+              <button type="button" class="secondary" data-page="House is open">House open</button>
+              <button type="button" class="secondary" data-page="Interval: 5 minutes remaining">Interval 5</button>
+              <button type="button" class="secondary" data-page="Hold please" data-level="urgent">HOLD</button>
+            </div>
+            <form id="pageForm" class="page-form">
+              <label class="wide">
+                <span>Message</span>
+                <input name="text" maxlength="200" autocomplete="off" placeholder="Type a call…">
+              </label>
+              <label>
+                <span>To</span>
+                <select name="target">
+                  <option value="all">Every screen</option>
+                  <option value="dashboard">TV dashboards</option>
+                  <option value="monitor">Monitors</option>
+                </select>
+              </label>
+              <label>
+                <span>Style</span>
+                <select name="level">
+                  <option value="call">Call</option>
+                  <option value="info">Info</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </label>
+              <label>
+                <span>Clear after (s)</span>
+                <input name="durationSec" type="number" min="0" max="3600" value="60" inputmode="numeric">
+              </label>
+              <div class="form-actions wide">
+                <button type="submit">Send call</button>
+                <button type="button" class="secondary" data-show="clearPage">Clear</button>
+              </div>
+            </form>
+          </section>
+
+          <div class="panel dept-panel dept-cues-panel">
+            <div class="panel-head">
+              <h2 id="deptCuesTitle">My cues</h2>
+              <span id="deptCueCount">0 cues</span>
+            </div>
+            <div id="deptCues" class="dept-cues empty">No cues yet.</div>
           </div>
-          <div id="deptCues" class="dept-cues empty">No cues yet.</div>
         </div>
       </section>
 

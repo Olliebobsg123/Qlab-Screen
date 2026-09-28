@@ -13,7 +13,6 @@
       label: "Run cues",
       items: [
         { href: "/login.html", text: "Departments", also: ["/dept.html"] },
-        { href: "/control.html", text: "Control", locked: true },
         { href: "/midi.html", text: "MIDI", locked: true }
       ]
     },

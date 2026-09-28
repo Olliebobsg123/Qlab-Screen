@@ -16,6 +16,7 @@ let view = null;
 let viewCuesVersion = -1;
 let loadingView = null;
 let toastTimer = null;
+let targetsAdded = false;
 
 await loadView();
 
@@ -42,6 +43,7 @@ document.addEventListener("click", (event) => {
 });
 
 setupKeyboard();
+setupShowControls();
 
 async function loadView() {
   if (loadingView) return loadingView;
@@ -56,7 +58,10 @@ async function loadView() {
     const { department } = view;
     document.title = `${department.name} · Cues`;
     $("#deptName").textContent = department.name;
-    $("#deptEyebrow").textContent = adminDept ? "Department (admin view)" : "Department";
+    const isStageManager = department.role === "stageManager";
+    $("#deptEyebrow").textContent = `${isStageManager ? "Stage manager" : "Department"}${adminDept ? " (admin view)" : ""}`;
+    document.body.classList.toggle("is-stage-manager", isStageManager);
+    addDepartmentTargets();
     document.documentElement.style.setProperty("--dept", COLORS[department.color] || COLORS.blue);
     render();
   })().finally(() => {
@@ -84,13 +89,19 @@ async function act(body, label) {
 function render() {
   if (!view) return;
   const cueMap = new Map((state.cues || []).map((cue) => [cue.uniqueID, cue]));
-  const owned = new Set(view.cueIds);
-  const running = (state.running || []).filter((cue) => owned.has(cue.uniqueID));
+  const can = (permission) => view.department.permissions?.includes(permission);
+  const showAll = Boolean(view.showAll);
+  const owned = new Set(showAll ? (state.cues || []).filter((cue) => cue.depth > 0).map((cue) => cue.uniqueID) : view.cueIds);
+  const running = (state.running || []).filter((cue) => owned.has(cue.uniqueID) && cue.type !== "Cue List");
   const runningIds = new Set(running.map((cue) => cue.uniqueID));
   const playheads = state.playheads || {};
   const sequenceMode = view.mode === "sequence";
   const sequenceNextId = state.deptNext?.[view.department.id] || "";
-  const standbyIds = new Set(sequenceMode ? [sequenceNextId].filter(Boolean) : view.lists.map((list) => playheads[list.id]).filter(Boolean));
+  const standbyIds = new Set(showAll
+    ? [state.standbyId].filter(Boolean)
+    : sequenceMode ? [sequenceNextId].filter(Boolean) : view.lists.map((list) => playheads[list.id]).filter(Boolean));
+
+  renderShowControls(cueMap, can);
 
   const qlab = $("#deptQlab");
   qlab.dataset.state = state.connected ? "on" : "off";
@@ -100,7 +111,7 @@ function render() {
   const problems = [];
   if (state.connected === false) problems.push("QLab isn't connected right now.");
   if (state.controlEnabled === false) problems.push("Cue control is switched off by the admin, so buttons won't do anything.");
-  if (!view.cueIds.length) problems.push("No cues are assigned to this department yet. Ask the admin to choose your cue list in Admin → Departments.");
+  if (!view.cueIds.length && !showAll) problems.push("No cues are assigned to this department yet. Ask the admin to choose your cues in Admin → Departments.");
   notice.textContent = problems.join(" ");
   notice.hidden = !problems.length;
 
@@ -152,16 +163,21 @@ function render() {
     }).join("")
     : "Nothing running.";
 
-  const cues = (state.cues || []).filter((cue) => owned.has(cue.uniqueID));
-  $("#deptCueCount").textContent = `${cues.length} cue${cues.length === 1 ? "" : "s"}`;
+  // Departments that can fire any cue see the whole show, with cue list headings.
+  const cues = (state.cues || []).filter((cue) => owned.has(cue.uniqueID) || (showAll && cue.depth === 0));
+  const cueCount = cues.filter((cue) => cue.depth > 0).length;
+  $("#deptCuesTitle").textContent = showAll ? "Show cues" : "My cues";
+  $("#deptCueCount").textContent = `${cueCount} cue${cueCount === 1 ? "" : "s"}`;
+  $("#stopAllButton").textContent = can("transport") ? "Stop all cues" : "Stop all my cues";
   const listIds = new Set(view.lists.map((list) => list.id));
   const cuesEl = $("#deptCues");
   cuesEl.classList.toggle("empty", !cues.length);
   cuesEl.innerHTML = cues.length
     ? cues.map((cue) => {
+      if (cue.depth === 0) return `<div class="dept-cue-list">${escapeHtml(cue.name || cue.listName || "Cue list")}</div>`;
       const isRunning = runningIds.has(cue.uniqueID);
       const isNext = standbyIds.has(cue.uniqueID);
-      const inOwnList = sequenceMode || listIds.has(rootList(cue, cueMap));
+      const inOwnList = showAll || sequenceMode || listIds.has(rootList(cue, cueMap));
       const swatch = COLORS[String(cue.colorName || "").toLowerCase()];
       return `
         <div class="dept-cue ${isRunning ? "running" : ""} ${isNext ? "standby" : ""}" style="--depth:${Math.max(0, Number(cue.depth || 1) - 1)}">
@@ -191,7 +207,13 @@ function renderClock() {
   chip.hidden = clock.state === "idle";
   chip.textContent = `${clock.label} ${clock.value}`;
   chip.dataset.state = clock.state;
-  renderPageOverlay(state.page, { pageKind: "department", dept: view?.department.id });
+  // Whoever sends calls sees them in the paging card, not as an overlay over their controls.
+  if (!view?.department.permissions?.includes("paging")) {
+    renderPageOverlay(state.page, { pageKind: "department", dept: view?.department.id });
+  }
+  $("#clockValue").textContent = clock.value;
+  $("#clockValue").dataset.state = clock.state;
+  $("#clockLabel").textContent = clock.state === "idle" ? "Not started" : clock.label;
 }
 
 function rootList(cue, cueMap) {
@@ -226,6 +248,11 @@ function setupKeyboard() {
   document.addEventListener("keydown", (event) => {
     if (!toggle.checked || event.repeat || event.code !== "Space") return;
     if (event.target.closest("input, select, textarea, button")) return;
+    if (view?.department.permissions?.includes("showGo")) {
+      event.preventDefault();
+      showAct("go", {}, "GO");
+      return;
+    }
     if (!view || (view.mode !== "sequence" && !view.lists[0])) return;
     event.preventDefault();
     act({ action: "go", listId: view.lists[0]?.id }, "GO");
@@ -239,4 +266,105 @@ function toast(text, isError = false) {
   element.classList.add("visible");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => element.classList.remove("visible"), isError ? 4000 : 1200);
+}
+
+// --- Show-wide controls (Stage Manager and departments given those powers) ---
+
+const SHOW_LABELS = {
+  go: "GO", next: "Next", previous: "Previous", pause: "Paused all", resume: "Resumed all", stop: "Stopped all",
+  panic: "Panic", hardStop: "Hard stop", startCue: "Started", standby: "Standing by", showStart: "Show started",
+  showEnd: "Show ended", intervalStart: "Interval started", intervalEnd: "Interval ended", page: "Call sent", clearPage: "Call cleared"
+};
+
+function showAct(control, extra = {}, label = SHOW_LABELS[control] || control) {
+  return act({ action: "control", control, ...extra }, label);
+}
+
+function renderShowControls(cueMap, can) {
+  const showGo = can("showGo");
+  const transport = can("transport");
+  const anyCue = can("anyCue");
+  $("#showCard").hidden = !(showGo || transport || anyCue);
+  $("#showGoBlock").hidden = !showGo;
+  $("#transportBlock").hidden = !transport;
+  $("#cueNumberForm").hidden = !anyCue;
+  $("#clockCard").hidden = !can("showClock");
+  $("#pagingCard").hidden = !can("paging");
+
+  const standby = cueMap.get(state.standbyId);
+  const notes = getCueNotes(state, standby?.uniqueID);
+  $("#showNumber").textContent = standby?.number || "–";
+  $("#showName").textContent = standby ? cueName(standby) : (state.connected ? "Nothing on standby" : "Waiting for QLab");
+  $("#showNotes").hidden = !notes;
+  $("#showNotes").textContent = notes;
+  $("#showGo").disabled = !state.connected;
+  $("#pageStatus").textContent = state.page ? `Showing: “${state.page.text}”` : "No active call";
+}
+
+function setupShowControls() {
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-show]");
+    if (!button) return;
+    showAct(button.dataset.show);
+  });
+
+  $("#hardStopButton").addEventListener("click", () => {
+    if (window.confirm("Hard stop every cue immediately, with no fade?")) showAct("hardStop");
+  });
+  $("#intervalStartButton").addEventListener("click", () => {
+    showAct("intervalStart", { minutes: Number($("#intervalMinutes").value) || 0 });
+  });
+  $("#cueNumberForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const control = event.submitter?.dataset.cueAction || "startCue";
+    showAct(control, { cue: event.target.elements.cue.value.trim() });
+  });
+
+  const pageForm = $("#pageForm");
+  const pageFields = () => ({
+    level: pageForm.elements.level.value,
+    target: pageForm.elements.target.value,
+    durationSec: Number(pageForm.elements.durationSec.value) || 0
+  });
+  for (const button of document.querySelectorAll("[data-page]")) {
+    button.addEventListener("click", () => {
+      showAct("page", { ...pageFields(), text: button.dataset.page, level: button.dataset.level || pageForm.elements.level.value });
+    });
+  }
+  pageForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!pageForm.elements.text.value.trim()) return;
+    await showAct("page", { ...pageFields(), text: pageForm.elements.text.value });
+    pageForm.elements.text.value = "";
+  });
+
+  // Hold to panic, so a stray tap can't fade out the show.
+  const panic = $("#panicButton");
+  let timer = null;
+  const start = (event) => {
+    event.preventDefault();
+    panic.classList.add("holding");
+    timer = setTimeout(() => {
+      panic.classList.remove("holding");
+      showAct("panic");
+    }, 800);
+  };
+  const cancel = () => {
+    clearTimeout(timer);
+    panic.classList.remove("holding");
+  };
+  panic.addEventListener("pointerdown", start);
+  for (const type of ["pointerup", "pointerleave", "pointercancel"]) panic.addEventListener(type, cancel);
+}
+
+async function addDepartmentTargets() {
+  if (targetsAdded) return;
+  targetsAdded = true;
+  const { departments = [] } = await fetch("/api/departments").then((response) => response.json()).catch(() => ({}));
+  const others = departments.filter((department) => department.id !== view?.department.id);
+  if (!others.length) return;
+  const group = document.createElement("optgroup");
+  group.label = "Departments";
+  for (const department of others) group.append(new Option(department.name, department.id));
+  $("#pageForm").elements.target.append(group);
 }

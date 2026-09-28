@@ -2791,3 +2791,195 @@ body.focus-mode .topbar {
 .dept-more .dept-card-row + .dept-card-row {
   margin-top: 14px;
 }
+
+/* --- Stage Manager department --- */
+
+.dept-card.is-stage-manager {
+  border-color: rgba(250, 204, 21, 0.45);
+}
+
+.dept-card-badge {
+  color: var(--warn);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.dept-card-badge strong {
+  color: var(--text);
+}
+
+.dept-side {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.show-card {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px;
+  border-top: 3px solid var(--dept, var(--warn));
+}
+
+#showGoBlock {
+  display: grid;
+  gap: 14px;
+}
+
+.show-standby {
+  display: grid;
+  gap: 6px;
+}
+
+.show-standby .go-next {
+  font-size: 1.7rem;
+}
+
+.show-go {
+  min-height: 150px;
+  font-size: clamp(3.4rem, 8vw, 5.5rem);
+}
+
+.transport-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.transport-row button {
+  height: 48px;
+}
+
+.transport-row .panic-button {
+  grid-column: span 2;
+}
+
+.side-card {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+}
+
+.side-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.side-card-head h2 {
+  font-size: 1rem;
+}
+
+.clock-big {
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.clock-big[data-state="running"] { color: var(--running); }
+.clock-big[data-state="interval"],
+.clock-big[data-state="warn"] { color: var(--warn); }
+.clock-big[data-state="over"] { color: var(--danger); }
+.clock-big[data-state="idle"] { color: var(--muted); font-size: 1.4rem; }
+
+.side-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.side-card .interval-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.side-card .page-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.side-card .page-presets {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dept-cue-list {
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .transport-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .side-card .page-form,
+  .side-card .page-presets,
+  .side-card .interval-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .side-card .page-form .wide,
+  .side-card .interval-row label {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Cue names flow around their colour dot and badges instead of wrapping them onto new lines. */
+.dept-cue-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.dept-cue-name .cue-swatch,
+.dept-cue-name .badge {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.dept-cue-name .badge {
+  margin: 0 0 0 6px;
+}
+
+@media (max-width: 640px) {
+  .transport-row .panic-button {
+    grid-column: 1 / -1;
+    order: 5;
+    height: 56px;
+  }
+
+  .dept-shell .cue-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dept-shell .cue-form label {
+    grid-column: 1 / -1;
+  }
+
+  .dept-cue {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    padding: 6px 10px;
+  }
+
+  .show-go {
+    min-height: 120px;
+  }
+}
+
+/* On phones the header wraps to several rows, so let it scroll away rather than cover the page. */
+@media (max-width: 640px) {
+  .topbar {
+    position: static;
+  }
+}

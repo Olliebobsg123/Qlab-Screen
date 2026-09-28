@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { SETTINGS_DIR, SETTINGS_PATH } from "./config.js";
 
-// Declared before loadSettings() runs below, which uses it.
+// Declared before loadSettings() runs below, which uses them.
+export const DEPARTMENT_PERMISSIONS = ["showGo", "transport", "anyCue", "paging", "showClock"];
 const DEPARTMENT_COLORS = new Set(["red", "orange", "yellow", "green", "blue", "purple", "magenta", "gray", "none"]);
 
 let settings = await loadSettings();
@@ -133,6 +134,10 @@ function normalizeDepartment(saved) {
     cueColors: list(saved.cueColors).filter((color) => DEPARTMENT_COLORS.has(color)),
     cueTypes: list(saved.cueTypes).slice(0, 40).map((type) => type.slice(0, 30)),
     namePrefixes: list(saved.namePrefixes).slice(0, 10).map((prefix) => prefix.slice(0, 20)),
+    // "stageManager" marks the built-in Stage Manager department (always exists, can't be removed).
+    role: saved.role === "stageManager" ? "stageManager" : "",
+    // Extra powers beyond firing its own cues (see DEPARTMENT_PERMISSIONS).
+    permissions: list(saved.permissions).filter((permission) => DEPARTMENT_PERMISSIONS.includes(permission)),
     passwordHash: String(saved.passwordHash || ""),
     passwordSalt: String(saved.passwordSalt || "")
   };

@@ -1,8 +1,10 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { hasAdminAuth } from "./auth.js";
+import { runControlAction } from "./control.js";
+import { broadcastPatch } from "./events.js";
 import { getClientIp } from "./http-utils.js";
 import { listPlayhead, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
-import { controlSettings, getDepartments, saveDepartments, sessionSecret } from "./settings.js";
+import { DEPARTMENT_PERMISSIONS, controlSettings, getDepartments, saveDepartments, sessionSecret } from "./settings.js";
 import { logEvent } from "./show.js";
 import { registerMetaProvider, state } from "./state.js";
 
@@ -17,6 +19,40 @@ const loginFailures = new Map();
 // cue each one will fire on its next GO.
 const cursors = new Map();
 const END = "__end__";
+
+// Extra powers a department can be given, and the show-wide control actions each one unlocks.
+// The Stage Manager department gets all of them.
+const PERMISSION_ACTIONS = {
+  showGo: ["go", "next", "previous"],
+  transport: ["pause", "resume", "stop", "panic", "hardStop"],
+  anyCue: ["startCue", "stopCue", "standby"],
+  paging: ["page", "clearPage"],
+  showClock: ["showStart", "showEnd", "intervalStart", "intervalEnd"]
+};
+const STAGE_MANAGER_ID = "stage-manager";
+
+// The Stage Manager department always exists: create it on first run (and if it was lost).
+ensureStageManager().catch((error) => console.warn(`Could not create the Stage Manager department: ${error.message}`));
+
+async function ensureStageManager() {
+  const departments = getDepartments();
+  if (departments.some((department) => department.role === "stageManager")) return;
+  await saveDepartments([{
+    id: departments.some((department) => department.id === STAGE_MANAGER_ID) ? `${STAGE_MANAGER_ID}-${Date.now().toString(36)}` : STAGE_MANAGER_ID,
+    name: "Stage Manager",
+    color: "yellow",
+    role: "stageManager",
+    permissions: [...DEPARTMENT_PERMISSIONS],
+    cueListIds: [],
+    cueTypes: [],
+    cueColors: [],
+    namePrefixes: []
+  }, ...departments]);
+}
+
+export function stageManagerId() {
+  return getDepartments().find((department) => department.role === "stageManager")?.id || "";
+}
 
 // Every screen gets each department's next cue; department pages show their own.
 registerMetaProvider(() => ({ deptNext: departmentNextIds() }));
@@ -34,10 +70,16 @@ export function adminDepartmentList() {
 // `departments` is the full edited list; `passwords` maps department id -> new password (optional).
 export async function updateDepartments(departments, passwords = {}) {
   const existing = new Map(getDepartments().map((department) => [department.id, department]));
-  const next = (Array.isArray(departments) ? departments : []).map((department) => {
+  const submitted = Array.isArray(departments) ? departments : [];
+  // The Stage Manager can be edited but not removed.
+  const stageManager = getDepartments().find((department) => department.role === "stageManager");
+  if (stageManager && !submitted.some((department) => department.id === stageManager.id)) submitted.unshift(stageManager);
+  const next = submitted.map((department) => {
     const previous = existing.get(department.id) || {};
     const result = {
       ...department,
+      // Only the built-in Stage Manager keeps its role; it can't be given to another department.
+      role: previous.role || "",
       passwordHash: previous.passwordHash || "",
       passwordSalt: previous.passwordSalt || ""
     };
@@ -58,7 +100,7 @@ export async function updateDepartments(departments, passwords = {}) {
 export function loginDepartments() {
   return getDepartments()
     .filter((department) => department.passwordHash)
-    .map((department) => ({ id: department.id, name: department.name, color: department.color }));
+    .map((department) => ({ id: department.id, name: department.name, color: department.color, role: department.role }));
 }
 
 export function login(request, response, { departmentId, password }) {
@@ -217,6 +259,8 @@ export function departmentView(department) {
   return {
     department: publicDepartment(department),
     mode,
+    // Departments allowed to fire any cue see (and can control) the whole show.
+    showAll: department.permissions.includes("anyCue"),
     cueIds: departmentCueIds(department),
     lists: mode === "list" ? lists : []
   };
@@ -224,9 +268,12 @@ export function departmentView(department) {
 
 // --- Actions ---
 
-export async function runDepartmentAction(department, { action, cueId, listId }) {
+export async function runDepartmentAction(department, body = {}) {
+  const { action, cueId, listId } = body;
+  if (action === "control") return runShowAction(department, body);
   if (!controlSettings().enabled) throw httpError(403, "QLab control is turned off. Ask the admin to turn it on.");
-  const owned = new Set(departmentCueIds(department));
+  const anyCue = department.permissions.includes("anyCue");
+  const owned = new Set(anyCue ? state.cues.filter((cue) => cue.depth > 0).map((cue) => cue.uniqueID) : departmentCueIds(department));
   const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
   const cueLabel = (id) => {
     const cue = cueMap.get(id);
@@ -281,14 +328,14 @@ export async function runDepartmentAction(department, { action, cueId, listId })
     const id = requireCue();
     detail = `Stop ${cueLabel(id)}`;
     await sendWorkspaceCommand(`/cue_id/${id}/stop`);
-  } else if (action === "standby" && sequenceMode) {
+  } else if (action === "standby" && sequenceMode && !anyCue) {
     const id = requireCue();
     detail = `Standby ${cueLabel(id)}`;
     setCursor(department, id);
   } else if (action === "standby") {
     const id = requireCue();
     const list = rootListId(cueMap.get(id), cueMap);
-    if (!department.cueListIds.includes(list)) throw httpError(400, "Standby only works for cues in your own cue list.");
+    if (!anyCue && !department.cueListIds.includes(list)) throw httpError(400, "Standby only works for cues in your own cue list.");
     detail = `Standby ${cueLabel(id)}`;
     await setPlayhead(list, id);
   } else if (action === "next" || action === "previous") {
@@ -305,6 +352,16 @@ export async function runDepartmentAction(department, { action, cueId, listId })
 
   logEvent("department", `${department.name}: ${detail}`);
   return { ok: true };
+}
+
+// Show-wide actions (whole-show GO, panic, show clock, paging...) for departments with the power.
+async function runShowAction(department, body) {
+  const controlAction = String(body.control || "");
+  const permission = Object.keys(PERMISSION_ACTIONS).find((key) => PERMISSION_ACTIONS[key].includes(controlAction));
+  if (!permission) throw httpError(400, `Unknown action "${controlAction}".`);
+  if (!department.permissions.includes(permission)) throw httpError(403, "Your department isn't allowed to do that.");
+  const result = await runControlAction(controlAction, { ...body, source: department.name }, broadcastPatch);
+  return { ok: true, status: result?.status || "ok" };
 }
 
 // GO a specific cue list: start the cue at its playhead and move the playhead on.
@@ -340,7 +397,9 @@ function publicDepartment(department) {
     cueListIds: department.cueListIds,
     cueColors: department.cueColors,
     cueTypes: department.cueTypes,
-    namePrefixes: department.namePrefixes
+    namePrefixes: department.namePrefixes,
+    role: department.role,
+    permissions: department.permissions
   };
 }
 
