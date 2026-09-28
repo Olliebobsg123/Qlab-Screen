@@ -16,6 +16,7 @@ const CUE_LIST_MS = 500;
 const PLAYHEAD_MS = 1000;
 const PLAYHEAD_BACKOFF_MS = 30_000;
 let openWorkspaces = [];
+let connectInfo = { reply: "", connectedAt: 0, updates: 0 };
 const extraNoteIds = [];
 
 // Lets other modules (departments) ask for notes on the cues they show.
@@ -79,6 +80,8 @@ export async function connectToQlab(connection) {
   if (!String(connectReply.data).toLowerCase().startsWith("ok")) {
     throw new Error(`QLab rejected the passcode: ${connectReply.data || "unknown response"}.`);
   }
+  // QLab 5 answers e.g. "ok:view|edit|control", which tells us what the passcode allows.
+  connectInfo = { reply: String(connectReply.data), connectedAt: Date.now(), updates: 0 };
 
   Object.assign(state, {
     connected: true,
@@ -460,6 +463,7 @@ function handleTcpData(chunk) {
 
 function normalizeReply(packet) {
   if (packet.address?.startsWith("/update/")) {
+    connectInfo.updates += 1;
     // QLab 5 sends .../playhead, QLab 4 sends .../playbackPosition; both carry the standby cue ID.
     const playheadMatch = packet.address.match(/\/cueList\/([^/]+)\/(playbackPosition|playhead)$/);
     if (playheadMatch) {
@@ -569,6 +573,17 @@ export async function queryCueValue(cueId, field) {
   if (!state.connected) return null;
   const reply = await query(state.host, `/workspace/${state.workspaceId}/cue_id/${cueId}/${field}`, [], 1500);
   return reply.status && reply.status !== "ok" ? null : reply.data;
+}
+
+// For the QLab check in Admin.
+export function connectionInfo() {
+  return { ...connectInfo, playheadField };
+}
+
+export function rawQuery(path, args = [], timeoutMs = 1500) {
+  if (!state.connected) return Promise.reject(new Error("Not connected to QLab."));
+  const address = path.startsWith("/workspace/") || path === "/version" ? path : `/workspace/${state.workspaceId}${path}`;
+  return query(state.host, address, args, timeoutMs);
 }
 
 export function listPlayhead(listId) {

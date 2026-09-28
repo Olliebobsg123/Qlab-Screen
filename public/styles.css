@@ -3159,3 +3159,227 @@ body.focus-mode .topbar {
     border-radius: 16px 16px 0 0;
   }
 }
+
+/* --- Admin: QLab check --- */
+
+.qlab-check {
+  margin-top: 18px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.check-results {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check-results:empty {
+  display: none;
+}
+
+.check-item {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+}
+
+.check-item span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.check-item em {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: normal;
+}
+
+.check-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.check-item[data-status="ok"] .check-icon { background: var(--running); color: #03170a; }
+.check-item[data-status="warn"] .check-icon { background: var(--warn); color: #231a02; }
+.check-item[data-status="fail"] .check-icon { background: var(--danger); color: #2a0409; }
+.check-item[data-status="skipped"] .check-icon { background: var(--line-strong); color: var(--muted); }
+.check-item[data-status="fail"] { border-color: rgba(251, 113, 133, 0.5); }
+
+@media (max-width: 640px) {
+  .check-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Cue lights --- */
+
+.cue-light {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px max(16px, calc((100vw - 1440px) / 2));
+  color: #1f1600;
+  font-weight: 800;
+}
+
+.cue-light-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: baseline;
+}
+
+.cue-light-word {
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.cue-light-cue {
+  font-size: clamp(1.1rem, 3vw, 1.6rem);
+}
+
+.cue-light-by {
+  font-size: 0.95rem;
+  font-style: normal;
+  opacity: 0.75;
+}
+
+.cue-light-ack {
+  height: 54px;
+  padding: 0 24px;
+  border: 2px solid #1f1600;
+  background: #1f1600;
+  color: var(--warn);
+  font-size: 1.1rem;
+}
+
+.cue-light[data-state="standby"] {
+  background: var(--warn);
+  animation: cue-light-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.cue-light[data-state="ready"] {
+  background: var(--warn);
+}
+
+.cue-light[data-state="go"] {
+  background: var(--running);
+  color: #03170a;
+  animation: cue-light-pulse 0.35s ease-in-out 8 alternate;
+}
+
+@keyframes cue-light-pulse {
+  from { filter: brightness(1); }
+  to { filter: brightness(0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cue-light {
+    animation: none !important;
+  }
+}
+
+/* Stage manager: cue light rows */
+
+.light-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.light-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-strong);
+}
+
+.light-row[data-state="standby"] { border-left-color: var(--warn); }
+.light-row[data-state="ready"] { border-left-color: var(--warn); background: var(--warn-soft); }
+.light-row[data-state="go"] { border-left-color: var(--running); background: var(--running-soft); }
+
+.light-name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 800;
+}
+
+.light-status {
+  justify-self: end;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.light-row[data-state="standby"] .light-status { color: var(--warn); }
+.light-row[data-state="ready"] .light-status { color: var(--warn); }
+.light-row[data-state="go"] .light-status { color: var(--running); }
+
+.light-controls {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 6px;
+}
+
+.light-controls input {
+  height: 40px;
+}
+
+.light-controls button {
+  height: 40px;
+  padding: 0 12px;
+}
+
+.light-standby-button {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: #1f1600;
+}
+
+.light-go-button {
+  border-color: var(--running);
+  background: var(--running);
+  color: #03170a;
+}
+
+@media (max-width: 640px) {
+  .light-controls {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .light-controls input {
+    grid-column: 1 / -1;
+  }
+}

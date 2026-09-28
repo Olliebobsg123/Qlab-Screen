@@ -500,3 +500,90 @@ function cueTypeOptions(department) {
   for (const type of department.cueTypes || []) if (!all.includes(type)) all.push(type);
   return all;
 }
+
+
+// --- Server: admin login and running as a service ---
+
+const adminLoginForm = document.querySelector("#adminLoginForm");
+const adminLoginMessage = document.querySelector("#adminLoginMessage");
+
+loadServerInfo();
+
+async function loadServerInfo() {
+  const info = await fetch("/api/admin/server", { cache: "no-store" }).then((response) => response.json()).catch(() => null);
+  if (!info) return;
+  document.querySelector("#defaultPasswordNotice").hidden = !info.defaultPassword;
+  adminLoginForm.elements.user.value = info.adminUser;
+  if (info.fromEnvironment) {
+    for (const element of adminLoginForm.elements) element.disabled = true;
+    adminLoginMessage.textContent = "The admin login is set by ADMIN_USER / ADMIN_PASSWORD when the app starts, so it can't be changed here.";
+  }
+  document.querySelector("#serviceStatus").textContent = info.runningAsService
+    ? "✓ Running as a background service. It will start by itself after a restart."
+    : info.platform === "darwin"
+      ? "Not running as a service yet: it stops when its Terminal window closes."
+      : "The service commands below are for macOS. On Ubuntu use scripts/install-ubuntu.sh.";
+}
+
+adminLoginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  adminLoginMessage.textContent = "";
+  const response = await fetch("/api/admin/admin-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user: adminLoginForm.elements.user.value, password: adminLoginForm.elements.password.value })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    adminLoginMessage.textContent = data.error || "Could not change the admin login.";
+    return;
+  }
+  adminLoginForm.elements.password.value = "";
+  adminLoginMessage.textContent = "Saved. Your browser will ask you to log in again with the new details.";
+  document.querySelector("#defaultPasswordNotice").hidden = true;
+});
+
+
+// --- Check QLab ---
+
+const checkCue = document.querySelector("#checkCue");
+const checkButton = document.querySelector("#checkButton");
+const checkResults = document.querySelector("#checkResults");
+
+async function loadCheckCues() {
+  const data = await fetch("/api/state", { cache: "no-store" }).then((response) => response.json()).catch(() => ({}));
+  const playable = (data.cues || []).filter((cue) => ["Audio", "Video", "Mic"].includes(cue.type));
+  const current = checkCue.value;
+  checkCue.innerHTML = `<option value="">Don't play anything</option>` + playable
+    .map((cue) => `<option value="${escapeText(cue.uniqueID)}">${escapeText(`${cue.number ? `${cue.number} · ` : ""}${cue.name || cue.type} (${cue.type})`)}</option>`)
+    .join("");
+  checkCue.value = current;
+}
+checkCue.addEventListener("focus", loadCheckCues);
+loadCheckCues();
+
+checkButton.addEventListener("click", async () => {
+  if (checkCue.value && !window.confirm("The chosen cue will play for a few seconds (through your speakers or screens). Continue?")) return;
+  checkButton.disabled = true;
+  checkButton.textContent = "Checking…";
+  checkResults.innerHTML = "";
+  try {
+    const response = await fetch("/api/admin/qlab-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ testCueId: checkCue.value })
+    });
+    const data = await response.json();
+    const icons = { ok: "✓", warn: "!", fail: "✕", skipped: "–" };
+    checkResults.innerHTML = (data.results || []).map((result) => `
+      <li class="check-item" data-status="${escapeText(result.status)}">
+        <span class="check-icon" aria-hidden="true">${icons[result.status] || "?"}</span>
+        <span><strong>${escapeText(result.label)}</strong>${result.detail ? `<em>${escapeText(result.detail)}</em>` : ""}</span>
+      </li>`).join("");
+  } catch (error) {
+    checkResults.innerHTML = `<li class="check-item" data-status="fail"><span class="check-icon">✕</span><span>${escapeText(error.message)}</span></li>`;
+  } finally {
+    checkButton.disabled = false;
+    checkButton.textContent = "Check QLab";
+  }
+});

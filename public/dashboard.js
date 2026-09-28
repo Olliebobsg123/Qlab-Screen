@@ -9,6 +9,7 @@ import {
   openLiveEvents,
   readCueFilter,
   startLiveTimers,
+  renderCueLightBanner,
   renderPageOverlay,
   showClockInfo,
   syncServerTime
@@ -359,6 +360,7 @@ function renderClockAndPage() {
   tvShowClock.textContent = clock.state === "idle" ? "" : `${clock.label} ${clock.value}`;
   tvShowClock.dataset.state = clock.state;
   renderPageOverlay(currentState.page, { pageKind: VIEWER_PAGE, dept: cueFilter.dept });
+  renderCueLightBanner(currentState, cueFilter.dept);
 }
 
 function renderMeters(payload) {

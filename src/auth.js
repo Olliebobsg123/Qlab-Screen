@@ -1,4 +1,5 @@
-import { ADMIN_PASSWORD, ADMIN_USER } from "./config.js";
+import { timingSafeEqual } from "node:crypto";
+import { adminCredentials } from "./settings.js";
 
 const ADMIN_PAGES = new Set([
   "/admin.html",
@@ -27,7 +28,8 @@ export function hasAdminAuth(request) {
     const splitAt = decoded.indexOf(":");
     const username = decoded.slice(0, splitAt);
     const password = decoded.slice(splitAt + 1);
-    return username === ADMIN_USER && password === ADMIN_PASSWORD;
+    const expected = adminCredentials();
+    return safeEqual(username, expected.user) && safeEqual(password, expected.password);
   } catch {
     return false;
   }
@@ -39,4 +41,10 @@ export function requestAdminAuth(response) {
     "Content-Type": "text/plain; charset=utf-8"
   });
   response.end("Authentication required.");
+}
+
+function safeEqual(left, right) {
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && timingSafeEqual(a, b);
 }

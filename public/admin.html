@@ -17,12 +17,18 @@
       </header>
 
 
+      <p id="defaultPasswordNotice" class="notice" hidden>
+        You're still using the default admin password. Anyone on the network who knows it can control your show.
+        <a href="#server">Change it in the Server tab</a>.
+      </p>
+
       <nav class="tabs" role="tablist" aria-label="Admin sections">
         <button type="button" role="tab" class="tab" data-tab="qlab">QLab</button>
         <button type="button" role="tab" class="tab" data-tab="departments">Departments</button>
         <button type="button" role="tab" class="tab" data-tab="control">Control &amp; API</button>
         <button type="button" role="tab" class="tab" data-tab="share">Share</button>
         <button type="button" role="tab" class="tab" data-tab="backup">Backup</button>
+        <button type="button" role="tab" class="tab" data-tab="server">Server</button>
       </nav>
 
       <section id="tab-qlab" class="panel admin-panel tab-panel" role="tabpanel">
@@ -56,6 +62,23 @@
           <p id="adminMessage" class="form-message" aria-live="polite"></p>
         </form>
         <div id="qlabInfo" class="qlab-info" aria-live="polite"></div>
+
+        <div class="qlab-check">
+          <h3 class="subhead">Check QLab</h3>
+          <p class="help-text quiet">
+            Finds out what your QLab version and passcode support, so there are no surprises in the show.
+            The check only reads from QLab, unless you also pick a cue to test with: that cue plays for a few seconds
+            (use a quiet or silent audio cue) to test start-from, skipping, pause and stop.
+          </p>
+          <div class="check-row">
+            <label>
+              <span>Also test with this cue (optional)</span>
+              <select id="checkCue"><option value="">Don't play anything</option></select>
+            </label>
+            <button id="checkButton" type="button">Check QLab</button>
+          </div>
+          <ul id="checkResults" class="check-results" aria-live="polite"></ul>
+        </div>
       </section>
 
       <section id="tab-departments" class="panel admin-panel tab-panel" role="tabpanel" hidden>
@@ -140,6 +163,39 @@
         </div>
         <div id="restorePreview" class="restore-preview" hidden></div>
         <p id="backupMessage" class="form-message" aria-live="polite"></p>
+      </section>
+          <section id="tab-server" class="panel admin-panel tab-panel" role="tabpanel" hidden>
+        <div class="panel-head bare">
+          <h2>Admin login</h2>
+          <span>Used for Admin, MIDI, Report and “Open as admin”</span>
+        </div>
+        <form id="adminLoginForm" class="admin-form">
+          <label>
+            <span>Username</span>
+            <input name="user" autocomplete="username" value="admin">
+          </label>
+          <label>
+            <span>New password</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="6" required>
+          </label>
+          <div class="form-actions">
+            <button type="submit">Change admin login</button>
+          </div>
+          <p id="adminLoginMessage" class="form-message" aria-live="polite"></p>
+        </form>
+
+        <h3 class="subhead">Run automatically on this Mac</h3>
+        <p id="serviceStatus" class="help-text"></p>
+        <p class="help-text quiet">
+          Installed as a service, QLab Connect starts when the Mac logs in, restarts itself if it ever stops,
+          and keeps the Mac awake. In Terminal, in the QLab Connect folder:
+        </p>
+        <pre class="code-block">npm run mac:install     # install and start (asks for an admin password the first time)
+npm run mac:restart     # after updating with git pull
+npm run mac:status      # is it running?
+npm run mac:logs        # watch what it's doing
+npm run mac:uninstall   # stop and remove it</pre>
+        <p class="help-text quiet">For a show Mac, also turn on automatic login (System Settings → Users &amp; Groups) and set it to start up automatically after a power failure (System Settings → Energy).</p>
       </section>
     </main>
 

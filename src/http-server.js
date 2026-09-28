@@ -2,7 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import { hasAdminAuth, isAdminPath, requestAdminAuth } from "./auth.js";
 import { exportSetup, importSetup } from "./backup.js";
-import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, HTTPS_PORT, QLAB_TCP_PORT, SETTINGS_PATH } from "./config.js";
+import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, HTTPS_PORT, QLAB_TCP_PORT, ROOT_DIR, SETTINGS_PATH } from "./config.js";
 import { hasControlAuth, listControlActions, runControlAction } from "./control.js";
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
@@ -22,9 +22,11 @@ import {
 } from "./departments.js";
 import { midiOutputStatus, selectMidiOutput, sendMidiBytes } from "./midi-out.js";
 import { networkUrls, qrSvg } from "./network.js";
+import { runQlabCheck } from "./qlab-check.js";
 import { connectNetworkMidi, disconnectNetworkMidi, rtpMidiStatus } from "./rtp-midi.js";
 import { connectToQlab, disconnectQlab, keepConnected, qlabDiagnostics } from "./qlab.js";
 import {
+  adminCredentials,
   createControlToken,
   getSettings,
   normalizeMidiMapping,
@@ -33,7 +35,8 @@ import {
   publicSettings,
   updateControlSettings,
   updateServerSettings,
-  updateSettings
+  updateSettings,
+  usingDefaultAdminPassword
 } from "./settings.js";
 import { getShowReport, showReportCsv } from "./show.js";
 import { publicStatePatch, publicStateSnapshot, state } from "./state.js";
@@ -154,6 +157,30 @@ async function routeRequest(request, response) {
     return sendJson(response, { error: "Not found." }, 404);
   }
 
+  if (url.pathname === "/api/admin/server" && request.method === "GET") {
+    const credentials = adminCredentials();
+    return sendJson(response, {
+      adminUser: credentials.user,
+      defaultPassword: usingDefaultAdminPassword(),
+      fromEnvironment: credentials.fromEnvironment,
+      platform: process.platform,
+      appDir: ROOT_DIR,
+      runningAsService: process.env.QLAB_CONNECT_SERVICE === "1"
+    });
+  }
+
+  if (url.pathname === "/api/admin/admin-login" && request.method === "POST") {
+    const body = await readBody(request);
+    if (adminCredentials().fromEnvironment) {
+      return sendJson(response, { error: "The admin login is set by ADMIN_USER / ADMIN_PASSWORD when the app starts. Remove those to change it here." }, 409);
+    }
+    const user = String(body.user || "").trim() || "admin";
+    const password = String(body.password || "");
+    if (password.length < 6) return sendJson(response, { error: "Use at least 6 characters for the admin password." }, 400);
+    await updateServerSettings({ adminUser: user, adminPassword: password });
+    return sendJson(response, { ok: true, adminUser: user });
+  }
+
   if (url.pathname === "/api/admin/backup" && request.method === "GET") {
     const date = new Date().toISOString().slice(0, 10);
     const name = (state.workspaceName || "setup").replace(/\.qlab\d*$/i, "").replace(/[^\w -]+/g, "").trim() || "setup";
@@ -170,6 +197,11 @@ async function routeRequest(request, response) {
     if (saved.autoConnect && saved.host) keepConnected(saved);
     broadcastPatch();
     return sendJson(response, { ok: true, restartRequired });
+  }
+
+  if (url.pathname === "/api/admin/qlab-check" && request.method === "POST") {
+    const body = await readBody(request).catch(() => ({}));
+    return sendJson(response, await runQlabCheck({ testCueId: String(body.testCueId || "") }));
   }
 
   if (url.pathname === "/api/admin/qlab-info" && request.method === "GET") {

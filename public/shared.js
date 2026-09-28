@@ -447,3 +447,49 @@ export function openLiveEvents(pageKind, clientId) {
 
   return api;
 }
+
+// --- Cue light banner (department pages; monitor/TV when filtered to one department) ---
+
+let cueLightBanner = null;
+let lastCueLightKey = "";
+
+// onAck: when given, the banner has a "Standing by" button (department pages only).
+export function renderCueLightBanner(state, departmentId, { onAck } = {}) {
+  const light = departmentId ? state?.cueLights?.[departmentId] : null;
+  if (!light) {
+    cueLightBanner?.remove();
+    cueLightBanner = null;
+    lastCueLightKey = "";
+    return;
+  }
+
+  if (!cueLightBanner) {
+    cueLightBanner = document.createElement("section");
+    cueLightBanner.className = "cue-light";
+    cueLightBanner.setAttribute("role", "alert");
+    cueLightBanner.innerHTML = `
+      <div class="cue-light-text">
+        <strong class="cue-light-word"></strong>
+        <span class="cue-light-cue"></span>
+        <em class="cue-light-by"></em>
+      </div>
+      <button type="button" class="cue-light-ack">Standing by</button>`;
+    cueLightBanner.querySelector(".cue-light-ack").addEventListener("click", () => onAck?.());
+    document.body.prepend(cueLightBanner);
+  }
+
+  const key = `${light.state}:${light.at}`;
+  if (key === lastCueLightKey) return;
+  lastCueLightKey = key;
+  const words = { standby: "STANDBY", ready: "STANDING BY", go: "GO" };
+  cueLightBanner.dataset.state = light.state;
+  cueLightBanner.querySelector(".cue-light-word").textContent = words[light.state] || light.state;
+  cueLightBanner.querySelector(".cue-light-cue").textContent = light.cue || "";
+  cueLightBanner.querySelector(".cue-light-by").textContent = light.state === "ready"
+    ? "Waiting for GO"
+    : light.by ? `from ${light.by}` : "";
+  cueLightBanner.querySelector(".cue-light-ack").hidden = !(onAck && light.state === "standby");
+  // A buzz on phones that support it, so operators notice without looking.
+  if (light.state === "standby") navigator.vibrate?.(250);
+  if (light.state === "go") navigator.vibrate?.([120, 60, 120]);
+}

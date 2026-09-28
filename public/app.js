@@ -11,6 +11,7 @@ import {
   getCueNotes,
   getStandbyCue,
   readCueFilter,
+  renderCueLightBanner,
   renderPageOverlay,
   showClockInfo,
   syncServerTime
@@ -243,6 +244,7 @@ function renderClockAndPage() {
   showClockValue.textContent = clock.value;
   showClockCell.dataset.state = clock.state;
   renderPageOverlay(currentState?.page, { pageKind: VIEWER_PAGE, dept: cueFilter.dept });
+  renderCueLightBanner(currentState, cueFilter.dept);
 }
 
 async function toggleFullscreen() {

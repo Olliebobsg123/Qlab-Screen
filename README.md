@@ -445,12 +445,63 @@ src/network.js            LAN addresses and QR codes
 src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
 src/midi-out.js           MIDI pass-through: WebSocket from the MIDI page to a MIDI output port
 src/departments.js        Department logins, cue ownership and department actions
+src/cuelights.js          Cue lights (standby / standing by / GO per department)
+src/qlab-check.js         "Check QLab" in Admin
+scripts/mac-service.sh    Run as a macOS background service (npm run mac:install)
 src/rtp-midi.js           Built-in network MIDI (RTP-MIDI) session "QLab Connect" for iPhones etc.
 public/shared.js          Browser helpers: departments, standby, show clock, paging overlay
 public/                   Browser UI
 deploy/qlabconnect.service systemd unit
 scripts/install-ubuntu.sh Ubuntu installer
 ```
+
+## Run it as a service on a Mac (recommended for shows)
+
+On the Mac that hosts QLab Connect (for example the QLab Mac mini), in the QLab Connect folder:
+
+```bash
+npm run mac:install     # install and start; asks you to choose an admin password the first time
+npm run mac:restart     # after updating with git pull
+npm run mac:status      # is it running? (plus the last log lines)
+npm run mac:logs        # follow the log
+npm run mac:uninstall   # stop and remove it
+```
+
+Installed this way, it:
+
+- starts when the Mac logs in
+- restarts itself within seconds if it ever stops
+- keeps the Mac from going to sleep while it runs
+
+The log is in `~/Library/Logs/QLab Connect/server.log`. For a show Mac, also:
+
+- turn on **automatic login** (System Settings → Users & Groups)
+- let it **start up after a power failure** (System Settings → Energy)
+
+The **admin login** is saved in settings and can be changed any time in **Admin → Server**. The change applies immediately. `ADMIN_USER` / `ADMIN_PASSWORD` environment variables still override it if you set them. Admin shows a warning while the default password is in use.
+
+## Check QLab
+
+**Admin → QLab → Check QLab** finds out what your QLab version and passcode support, and only reads from QLab. It checks:
+
+- the QLab version
+- whether the passcode has **control** access
+- response time
+- cue lists and carts
+- reading the playhead, cue lengths and notes
+- whether QLab announces changes
+
+Optionally, pick a cue to test with. It plays for a few seconds, so use a quiet or silent one. This checks starting part-way through, jumping while playing, pause/resume and stop. If this QLab can't jump a playing cue, the app switches to a backup method automatically: stop, move, restart, with a very short gap.
+
+## Cue lights
+
+The Stage Manager, and any department with the **Backstage calls** power, has a **Lights** tab listing the departments it may signal. For each one:
+
+1. Type a cue, or leave it blank to use the department's next cue, and press **Standby**. That department's page shows a flashing amber **STANDBY** banner with the cue, and phones that support it vibrate.
+2. The operator taps **Standing by**, and the Stage Manager sees "Standing by ✓".
+3. The Stage Manager presses **GO**. The banner flashes green, then clears itself after a few seconds. **✕** clears a light early.
+
+A Monitor or TV filtered to a department (`?dept=<id>`) shows that department's cue lights too, without the button. Every standby, acknowledgement and GO is recorded in the show report. The "can send calls to" limits apply to cue lights as well.
 
 ## Ubuntu Service Install
 

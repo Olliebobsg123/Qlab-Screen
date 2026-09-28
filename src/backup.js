@@ -1,4 +1,4 @@
-import { APP_VERSION, ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, QLAB_TCP_PORT } from "./config.js";
+import { APP_VERSION, HTTP_PORT, QLAB_TCP_PORT } from "./config.js";
 import { getSettings, updateSettings } from "./settings.js";
 import { state } from "./state.js";
 
@@ -90,10 +90,7 @@ export async function importSetup(backup) {
   };
   const saved = await updateSettings(next);
 
-  // Ports and the admin login are read at startup (and environment variables win over the file).
-  const restartRequired = saved.server.httpPort !== HTTP_PORT ||
-    saved.server.qlabTcpPort !== QLAB_TCP_PORT ||
-    (!process.env.ADMIN_USER && saved.server.adminUser !== ADMIN_USER) ||
-    (!process.env.ADMIN_PASSWORD && saved.server.adminPassword !== ADMIN_PASSWORD);
+  // Ports are read at startup; the admin login applies straight away.
+  const restartRequired = saved.server.httpPort !== HTTP_PORT || saved.server.qlabTcpPort !== QLAB_TCP_PORT;
   return { saved, restartRequired };
 }

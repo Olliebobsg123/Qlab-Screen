@@ -1,10 +1,11 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { hasAdminAuth } from "./auth.js";
 import { runControlAction } from "./control.js";
+import { getCueLight, publicCueLights, setCueLight } from "./cuelights.js";
 import { broadcastPatch } from "./events.js";
 import { getClientIp } from "./http-utils.js";
 import { listPlayhead, queryCueValue, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
-import { DEPARTMENT_PERMISSIONS, controlSettings, getDepartments, saveDepartments, sessionSecret } from "./settings.js";
+import { DEPARTMENT_PERMISSIONS, controlSettings, getDepartments, getSettings, saveDepartments, sessionSecret } from "./settings.js";
 import { logEvent } from "./show.js";
 import { registerMetaProvider, state } from "./state.js";
 
@@ -56,7 +57,7 @@ export function stageManagerId() {
 }
 
 // Every screen gets each department's next cue; department pages show their own.
-registerMetaProvider(() => ({ deptNext: departmentNextIds() }));
+registerMetaProvider(() => ({ deptNext: departmentNextIds(), cueLights: publicCueLights() }));
 registerNoteIds(() => Object.values(departmentNextIds()));
 
 // --- Admin management ---
@@ -272,6 +273,15 @@ export function departmentView(department) {
 export async function runDepartmentAction(department, body = {}) {
   const { action, cueId, listId } = body;
   if (action === "control") return runShowAction(department, body);
+  if (action === "cueLight") return runCueLightAction(department, body);
+  if (action === "cueLightAck") {
+    // The department answers its own standby.
+    const light = getCueLight(department.id);
+    if (!light || light.state !== "standby") throw httpError(409, "There's no standby to answer.");
+    setCueLight(department.id, "ready");
+    logEvent("cue-light", `${department.name}: standing by${light.cue ? ` for ${light.cue}` : ""}`);
+    return { ok: true };
+  }
   if (!controlSettings().enabled) throw httpError(403, "QLab control is turned off. Ask the admin to turn it on.");
   const anyCue = department.permissions.includes("anyCue");
   const owned = new Set(anyCue ? state.cues.filter((cue) => cue.depth > 0).map((cue) => cue.uniqueID) : departmentCueIds(department));
@@ -355,8 +365,15 @@ export async function runDepartmentAction(department, body = {}) {
     if (!Number.isFinite(seconds) || seconds < 0 || seconds > 86400) throw httpError(400, "Choose a valid time.");
     const time = Math.round(seconds * 100) / 100;
     detail = `${action === "startAt" ? "Start" : "Jump"} ${cueLabel(id)} at ${formatSeconds(time)}`;
-    await sendWorkspaceCommand(`/cue_id/${id}/loadActionAt`, [time]);
-    if (action === "startAt") await sendWorkspaceCommand(`/cue_id/${id}/start`);
+    if (action === "seek" && getSettings().qlabCaps.seek === "restart") {
+      // This QLab can't jump a playing cue (found by the QLab check): stop, move, start again.
+      await sendWorkspaceCommand(`/cue_id/${id}/stop`);
+      await sendWorkspaceCommand(`/cue_id/${id}/loadActionAt`, [time]);
+      await sendWorkspaceCommand(`/cue_id/${id}/start`);
+    } else {
+      await sendWorkspaceCommand(`/cue_id/${id}/loadActionAt`, [time]);
+      if (action === "startAt") await sendWorkspaceCommand(`/cue_id/${id}/start`);
+    }
   } else if (action === "stopAll") {
     const running = state.running.filter((cue) => owned.has(cue.uniqueID));
     detail = `Stop all (${running.length})`;
@@ -387,6 +404,25 @@ export async function departmentCueInfo(department, cueId) {
 
 function formatSeconds(seconds) {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
+}
+
+// Standby / GO / clear another department's cue light. Uses the backstage-calls power and its
+// "can send calls to" limits.
+function runCueLightAction(department, body) {
+  if (!department.permissions.includes("paging")) throw httpError(403, "Your department can't use cue lights.");
+  const target = getDepartments().find((entry) => entry.id === String(body.target || ""));
+  if (!target) throw httpError(404, "That department doesn't exist.");
+  if (department.pageTargets.length && !department.pageTargets.includes(target.id)) {
+    throw httpError(403, "Your department can't send cue lights there.");
+  }
+  const light = String(body.light || "");
+  if (!["standby", "go", "clear"].includes(light)) throw httpError(400, "Unknown cue light.");
+  setCueLight(target.id, light, { cue: body.cue, by: department.name }, broadcastPatch);
+  if (light !== "clear") {
+    const current = getCueLight(target.id);
+    logEvent("cue-light", `${department.name} → ${target.name}: ${light === "go" ? "GO" : "standby"}${current?.cue ? ` ${current.cue}` : ""}`);
+  }
+  return { ok: true };
 }
 
 // Show-wide actions (whole-show GO, panic, show clock, paging...) for departments with the power.

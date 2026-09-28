@@ -66,6 +66,20 @@ export function sessionSecret() {
   return settings.sessionSecret;
 }
 
+// The admin login. ADMIN_USER / ADMIN_PASSWORD environment variables win; otherwise it's the one
+// saved in settings (changeable in Admin, takes effect straight away).
+export function adminCredentials() {
+  return {
+    user: process.env.ADMIN_USER || settings.server.adminUser || "admin",
+    password: process.env.ADMIN_PASSWORD || settings.server.adminPassword || "thomas",
+    fromEnvironment: Boolean(process.env.ADMIN_USER || process.env.ADMIN_PASSWORD)
+  };
+}
+
+export function usingDefaultAdminPassword() {
+  return adminCredentials().password === "thomas";
+}
+
 export function serverSettings() {
   return settings.server;
 }
@@ -108,6 +122,11 @@ function normalizeSettings(saved) {
     workspaceId: String(saved.workspaceId || ""),
     autoConnect: Boolean(saved.autoConnect),
     control: normalizeControl(saved.control),
+    // What the last QLab check found this QLab version can do (see src/qlab-check.js).
+    qlabCaps: {
+      seek: saved.qlabCaps?.seek === "restart" ? "restart" : "direct",
+      checkedAt: String(saved.qlabCaps?.checkedAt || "")
+    },
     departments: Array.isArray(saved.departments) ? saved.departments.map(normalizeDepartment).filter(Boolean).slice(0, 24) : [],
     // Signs department login cookies; kept so a server restart doesn't log everyone out.
     sessionSecret: String(saved.sessionSecret || "") || randomBytes(32).toString("hex"),
