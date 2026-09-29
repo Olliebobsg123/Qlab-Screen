@@ -5,7 +5,7 @@ import { broadcastPatch } from "./events.js";
 import { encodeOsc, encodeSlip } from "./osc.js";
 import { getSettings } from "./settings.js";
 import { logEvent } from "./show.js";
-import { registerMetaProvider } from "./state.js";
+import { registerMetaProvider, state } from "./state.js";
 
 // Lighting desk link: when a QLab cue tagged with a desk cue number starts (e.g. named "LX 5",
 // or "Thunder [LX 5]"), QLab Connect itself sends the desk an OSC GO for that cue. QLab only
@@ -25,6 +25,13 @@ let linkKey = "";
 // null until the first reading after connecting to QLab: cues already running then aren't new GOs.
 let previousIds = null;
 const recent = [];
+// Cues QLab Connect itself just started (GO buttons, tapping a cue), already sent to the desk.
+const startedByUs = new Map();
+const STARTED_BY_US_MS = 3000;
+// Cue types that finish the moment they start, so they're never seen running. They only reach the
+// desk when they're started from QLab Connect.
+const INSTANT_TYPES = new Set(["Memo", "Start", "Stop", "Pause", "Load", "Reset", "Devamp", "GoTo", "Goto",
+  "Target", "Arm", "Disarm", "Script", "Network", "MIDI", "Text"]);
 
 export function deskSettings() {
   return getSettings().lightingDesk;
@@ -63,12 +70,50 @@ export function checkRunningForDesk(running) {
   if (!previous || !deskActive()) return;
   for (const cue of running) {
     if (!cue.uniqueID || previous.has(cue.uniqueID)) continue;
+    if (Date.now() - (startedByUs.get(cue.uniqueID) || 0) < STARTED_BY_US_MS) continue;
     const deskCue = deskCueFor(cue);
     if (deskCue) {
       const label = `${cue.number ? `${cue.number} ` : ""}${cue.name || ""}`.trim();
       sendDeskGo(deskCue, `QLab ${label}`).catch(() => {});
     }
   }
+}
+
+// QLab Connect is starting these cues (by unique ID) with run(): send the tagged ones to the desk
+// once QLab accepts, including instant cues like Memo cues that would never be seen running.
+// They're marked first, so the running check (which can hear back from QLab before run() returns)
+// doesn't send them a second time.
+export async function withDeskStart(cueIds, source, run) {
+  const ids = cueIds.filter(Boolean);
+  if (!deskActive() || !ids.length) return run();
+  const now = Date.now();
+  for (const [id, at] of startedByUs) if (now - at > STARTED_BY_US_MS) startedByUs.delete(id);
+  for (const id of ids) startedByUs.set(id, now);
+  let result;
+  try {
+    result = await run();
+  } catch (error) {
+    for (const id of ids) startedByUs.delete(id);
+    throw error;
+  }
+  for (const id of ids) {
+    const cue = state.cues.find((entry) => entry.uniqueID === id);
+    const deskCue = deskCueFor(cue);
+    if (!deskCue) continue;
+    const label = `${cue.number ? `${cue.number} ` : ""}${cue.name || ""}`.trim();
+    sendDeskGo(deskCue, `${source}: ${label}`).catch(() => {});
+  }
+  return result;
+}
+
+// Every tagged cue in the workspace, so the admin can see what will fire the desk.
+function taggedCues() {
+  return state.cues
+    .filter((cue) => cue.depth > 0)
+    .map((cue) => ({ number: cue.number || "", name: cue.name || "", type: cue.type || "", deskCue: deskCueFor(cue) }))
+    .filter((cue) => cue.deskCue)
+    .map((cue) => ({ ...cue, instant: INSTANT_TYPES.has(cue.type) }))
+    .slice(0, 300);
 }
 
 export async function sendDeskGo(deskCue, source = "") {
@@ -99,7 +144,7 @@ export async function sendDeskGo(deskCue, source = "") {
 }
 
 export function deskStatus() {
-  return { ...deskSettings(), recent, link };
+  return { ...deskSettings(), recent, link, tagged: taggedCues() };
 }
 
 // What every screen gets (department pages show a desk light).

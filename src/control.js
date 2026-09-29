@@ -1,7 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { hasAdminAuth } from "./auth.js";
 import { clearPage, sendPage } from "./paging.js";
+import { withDeskStart } from "./lighting-desk.js";
 import { sendWorkspaceCommand } from "./qlab.js";
+import { state } from "./state.js";
 import { controlSettings } from "./settings.js";
 import { endInterval, endShow, logEvent, resetShow, startInterval, startShow } from "./show.js";
 
@@ -18,7 +20,7 @@ const ACTIONS = {
   resume: { qlab: true, label: "Resume all", run: () => sendWorkspaceCommand("/resume") },
   next: { qlab: true, label: "Playhead next", run: () => movePlayhead("next") },
   previous: { qlab: true, label: "Playhead previous", run: () => movePlayhead("previous") },
-  startCue: { qlab: true, label: "Start cue", run: (arg) => sendWorkspaceCommand(`/cue/${cueNumber(arg)}/start`) },
+  startCue: { qlab: true, label: "Start cue", run: (arg) => startCueByNumber(arg) },
   stopCue: { qlab: true, label: "Stop cue", run: (arg) => sendWorkspaceCommand(`/cue/${cueNumber(arg)}/stop`) },
   standby: { qlab: true, label: "Set playhead", run: (arg) => sendWorkspaceCommand(`/playhead/${cueNumber(arg)}`) },
   page: { qlab: false, label: "Page backstage", run: (arg, body, onChange) => sendPage({ ...body, text: body.text || arg }, onChange) },
@@ -57,12 +59,18 @@ export async function runControlAction(actionId, body = {}, onChange = () => {})
   return result || { status: "ok" };
 }
 
+async function startCueByNumber(arg) {
+  const number = cueNumber(arg);
+  const cue = state.cues.find((entry) => entry.number && entry.number === number);
+  return withDeskStart([cue?.uniqueID], "Start cue", () => sendWorkspaceCommand(`/cue/${number}/start`));
+}
+
 async function goWithDebounce() {
   // Protects against a double-tap or a bouncing MIDI key firing two GOs.
   const now = Date.now();
   if (now - lastGoAt < GO_DEBOUNCE_MS) return { status: "debounced" };
   lastGoAt = now;
-  return sendWorkspaceCommand("/go");
+  return withDeskStart([state.standbyId], "GO", () => sendWorkspaceCommand("/go"));
 }
 
 async function movePlayhead(direction) {

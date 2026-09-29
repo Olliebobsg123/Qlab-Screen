@@ -6,6 +6,7 @@ import { broadcastPatch } from "./events.js";
 import { getClientIp } from "./http-utils.js";
 import { listPlayhead, queryCueValue, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
 import { DEPARTMENT_PERMISSIONS, controlSettings, getDepartments, getSettings, saveDepartments, sessionSecret } from "./settings.js";
+import { withDeskStart } from "./lighting-desk.js";
 import { logEvent } from "./show.js";
 import { registerMetaProvider, state } from "./state.js";
 
@@ -328,7 +329,7 @@ export async function runDepartmentAction(department, body = {}) {
       else setCursor(department, END);
       broadcastPatch();
       try {
-        await sendWorkspaceCommand(`/cue_id/${current}/start`);
+        await withDeskStart([current], department.name, () => sendWorkspaceCommand(`/cue_id/${current}/start`));
       } catch (error) {
         if (before) cursors.set(department.id, before);
         else cursors.delete(department.id);
@@ -346,12 +347,13 @@ export async function runDepartmentAction(department, body = {}) {
 
   if (action === "go") {
     const id = requireList();
-    detail = `GO${listPlayhead(id) ? ` ${cueLabel(listPlayhead(id))}` : ""}`;
-    await goList(id);
+    const standby = listPlayhead(id);
+    detail = `GO${standby ? ` ${cueLabel(standby)}` : ""}`;
+    await withDeskStart([standby], department.name, () => goList(id));
   } else if (action === "start") {
     const id = requireCue();
     detail = `Start ${cueLabel(id)}`;
-    await sendWorkspaceCommand(`/cue_id/${id}/start`);
+    await withDeskStart([id], department.name, () => sendWorkspaceCommand(`/cue_id/${id}/start`));
   } else if (action === "stop") {
     const id = requireCue();
     detail = `Stop ${cueLabel(id)}`;
@@ -389,7 +391,9 @@ export async function runDepartmentAction(department, body = {}) {
       await sendWorkspaceCommand(`/cue_id/${id}/start`);
     } else {
       await sendWorkspaceCommand(`/cue_id/${id}/loadActionAt`, [time]);
-      if (action === "startAt") await sendWorkspaceCommand(`/cue_id/${id}/start`);
+      if (action === "startAt") {
+        await withDeskStart([id], department.name, () => sendWorkspaceCommand(`/cue_id/${id}/start`));
+      }
     }
   } else if (action === "stopAll") {
     const running = state.running.filter((cue) => owned.has(cue.uniqueID));

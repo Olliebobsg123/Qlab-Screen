@@ -3695,3 +3695,13 @@ body.focus-mode .topbar {
 .desk-link[data-online="true"] .desk-link-dot {
   background: var(--running);
 }
+
+.desk-entry.warn {
+  border-left-color: var(--warn);
+}
+
+.desk-warning {
+  flex-basis: 100%;
+  color: var(--warn);
+  font-size: 0.85rem;
+}

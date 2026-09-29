@@ -527,7 +527,9 @@ The desk never answers OSC, so QLab Connect uses the connection itself as the ch
 
 Every department page shows a **Desk** chip while the link is on: "Desk ✓" when connected, "Desk offline" when not, and for a few seconds after each lighting GO "LX 5 → desk ✓" (or "LX 5 failed"). Every GO, delivered or failed, is in the show report.
 
-Memo cues finish instantly and can be missed. Tag a cue that lasts a moment instead: the sound cue itself, a Group, or a Wait cue of half a second or more. While the link is on, QLab Connect checks QLab about 12 times a second, so the desk GO lands within about a tenth of a second of QLab's. Cues already playing when QLab Connect connects aren't sent.
+**Memo cues:** a Memo cue finishes the instant it starts, so QLab Connect can't see it run. A tagged Memo cue still fires the desk when it's started from QLab Connect (Stage Manager or department GO, tapping the cue, MIDI or Stream Deck GO), because QLab Connect knows which cue it just started. When GO is pressed in QLab itself, it can't be seen, so use a cue that lasts a moment instead: a Wait cue of half a second or more named `LX 5`, a Group, or the sound cue itself (`Thunder [LX 5]`). Admin → Lighting desk lists every tagged cue in the workspace and warns about ones that end instantly.
+
+While the link is on, QLab Connect checks QLab about 12 times a second, so the desk GO lands within about a tenth of a second of QLab's. Cues already playing when QLab Connect connects aren't sent.
 
 ## Testing mode
 

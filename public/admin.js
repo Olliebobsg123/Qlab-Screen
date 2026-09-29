@@ -645,6 +645,7 @@ function renderDesk(desk) {
   document.querySelector("#deskState").textContent = on ? `On · ${desk.host}:${desk.port} ${desk.transport.toUpperCase()}` : "Off";
   document.querySelector("#deskLink").dataset.online = String(Boolean(on && desk.link?.online));
   document.querySelector("#deskLinkText").textContent = on ? desk.link?.detail || "Checking…" : "Off: tick “Send GOs to the lighting desk” and enter its IP address.";
+  renderDeskTagged(desk);
   const recent = desk.recent || [];
   const element = document.querySelector("#deskRecent");
   element.innerHTML = recent.length
@@ -655,6 +656,23 @@ function renderDesk(desk) {
         <span class="quiet">${escapeText(entry.source)} · ${new Date(entry.at).toLocaleTimeString()}</span>
       </div>`).join("")
     : "Nothing sent yet.";
+}
+
+function renderDeskTagged(desk) {
+  const tagged = desk.tagged || [];
+  const element = document.querySelector("#deskTagged");
+  const html = tagged.length
+    ? tagged.map((cue) => `
+      <div class="desk-entry ${cue.instant ? "warn" : ""}">
+        <strong>Desk cue ${escapeText(cue.deskCue)}</strong>
+        <span>QLab ${escapeText(cue.number)} ${escapeText(cue.name)} <span class="quiet">(${escapeText(cue.type)})</span></span>
+        ${cue.instant ? `<span class="desk-warning">A ${escapeText(cue.type)} cue ends instantly: it fires the desk when GO'd from QLab Connect, but not when GO'd in QLab itself. Use a Wait cue of 0.5 s, or tag the sound cue.</span>` : ""}
+      </div>`).join("")
+    : `No cues in this workspace are tagged. Name a cue <strong>${escapeText(desk.prefix)} 5</strong> or add <strong>[${escapeText(desk.prefix)} 5]</strong> to its name.`;
+  if (element.dataset.html !== html) {
+    element.dataset.html = html;
+    element.innerHTML = html;
+  }
 }
 
 deskForm.addEventListener("submit", async (event) => {
