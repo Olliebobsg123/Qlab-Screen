@@ -10,7 +10,7 @@
     "dev": "nodemon server.js",
     "electron": "electron .",
     "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",
-    "check": "node --check server.js && for f in src/*.js public/*.js electron/*.js electron/*.cjs; do node --check \"$f\"; done",
+    "check": "node scripts/check.mjs",
     "mac:install": "bash scripts/mac-service.sh install",
     "mac:restart": "bash scripts/mac-service.sh restart",
     "mac:status": "bash scripts/mac-service.sh status",
