@@ -537,6 +537,16 @@ The desk never answers OSC, so QLab Connect uses the connection itself as the ch
 - **TCP (recommended):** QLab Connect keeps a connection open to the desk's OSC port. The light in Admin → Lighting desk is green only while that connection is up, and each GO is written straight into it and marked **✓ Delivered**. If the connection drops (desk rebooted, cable out), the light goes red, QLab Connect reconnects on its own, and a GO fired meanwhile makes it try to reconnect immediately. A GO that still can't get through is marked **✕ Failed**.
 - **UDP:** GOs are sent but can't be confirmed. The light only shows whether the desk answers a ping.
 
+### Seeing the lights change (desk output watcher)
+
+"Delivered" proves the desk received the command, not that it did anything. If the desk sends its lighting output over the network (Art-Net, or sACN), tick **Watch the desk's lighting output** in Admin → Lighting desk (for sACN, list the universes, e.g. `1, 2`). QLab Connect then listens to the desk's output (only packets from the desk's IP address, so QLab's own Art-Net doesn't count):
+
+- After each GO it watches for 3 seconds: **💡 Lights changed** (with which channel moved, and how soon), or **No change seen on the desk**, which is logged in the report.
+- The Desk chip on department pages shows "LX 5 ✓ lights changed" or "LX 5: no change on desk".
+- Admin shows a live grid of all 512 channels, brighter squares for higher levels.
+
+On the FLX, the network output is set in Setup (DMX outputs / Art-Net / sACN). If the rig is only fed from the 5-pin DMX socket, turn on Art-Net or sACN output too. It doesn't need anything plugged in to be heard. A cue that doesn't change any levels (or has a long delay before it fades) will show "no change".
+
 Every department page shows a **Desk** chip while the link is on: "Desk ✓" when connected, "Desk offline" when not, and for a few seconds after each lighting GO "LX 5 → desk ✓" (or "LX 5 failed"). Every GO, delivered or failed, is in the show report.
 
 **Memo cues:** a Memo cue finishes the instant it starts, so QLab Connect can't see it run. A tagged Memo cue still fires the desk when it's started from QLab Connect (Stage Manager or department GO, tapping the cue, MIDI or Stream Deck GO), because QLab Connect knows which cue it just started. When GO is pressed in QLab itself, it can't be seen, so use a cue that lasts a moment instead: a Wait cue of half a second or more named `LX 5`, a Group, or the sound cue itself (`Thunder [LX 5]`). Admin → Lighting desk lists every tagged cue in the workspace and warns about ones that end instantly.

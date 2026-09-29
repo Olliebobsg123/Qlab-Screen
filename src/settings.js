@@ -187,6 +187,10 @@ function normalizeLightingDesk(saved) {
     prefix: String(desk.prefix ?? "LX").trim().slice(0, 12) || "LX",
     // "tcp" keeps a connection open, so we know the desk is listening and got each GO.
     transport: desk.transport === "udp" ? "udp" : "tcp",
+    // Listen to the desk's Art-Net / sACN output to see whether the lights changed after a GO.
+    watchOutput: Boolean(desk.watchOutput),
+    watchUniverses: (Array.isArray(desk.watchUniverses) ? desk.watchUniverses : String(desk.watchUniverses ?? "1").split(/[\s,]+/))
+      .map(Number).filter((universe) => Number.isInteger(universe) && universe >= 0 && universe <= 63999).slice(0, 8),
     // Zero 88 ZerOS: GO a cue on the master playback. {cue} is the desk cue number.
     command: command.startsWith("/") && command.includes("{cue}") ? command.slice(0, 120) : "/zeros/cue/go/{cue}"
   };

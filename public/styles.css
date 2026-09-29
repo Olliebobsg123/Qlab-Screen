@@ -3877,3 +3877,49 @@ body.focus-mode .topbar {
 .desk-tags td:first-child {
   color: var(--text);
 }
+
+/* Desk output: 512 channels, 32 per row */
+.desk-output {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.desk-output-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.desk-output-grid {
+  display: grid;
+  grid-template-columns: repeat(32, minmax(0, 1fr));
+  gap: 2px;
+}
+
+@media (min-width: 760px) {
+  .desk-output-grid {
+    grid-template-columns: repeat(64, minmax(0, 1fr));
+  }
+}
+
+.desk-output-head select {
+  width: auto;
+}
+
+.desk-output-grid span {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--warn) calc(var(--level, 0) * 100%), #1c1c1f);
+}
+
+.desk-output-result {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.desk-output-result[data-output="changed"] { color: var(--running); }
+.desk-output-result[data-output="unchanged"] { color: var(--warn); }

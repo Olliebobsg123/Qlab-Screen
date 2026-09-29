@@ -638,6 +638,8 @@ async function loadDesk() {
   deskForm.elements.prefix.value = desk.prefix;
   deskForm.elements.command.value = desk.command;
   deskForm.elements.transport.value = desk.transport;
+  deskForm.elements.watchOutput.checked = desk.watchOutput;
+  deskForm.elements.watchUniverses.value = (desk.watchUniverses || []).join(", ");
   renderDesk(desk);
 }
 
@@ -648,11 +650,54 @@ setInterval(async () => {
   if (desk) renderDesk(desk);
 }, 2000);
 
+// Live view of the desk's output: one square per channel, brighter = higher level.
+const outputUniverse = document.querySelector("#deskOutputUniverse");
+setInterval(async () => {
+  if (document.querySelector("#tab-desk").hidden || document.hidden || !deskForm.elements.watchOutput.checked) return;
+  const data = await fetch("/api/admin/lighting-desk/output", { cache: "no-store" }).then((response) => response.json()).catch(() => null);
+  renderOutput(data?.universes || []);
+}, 500);
+
+function renderOutput(universes) {
+  const box = document.querySelector("#deskOutput");
+  box.hidden = !deskForm.elements.watchOutput.checked;
+  const keys = universes.map((entry) => `${entry.protocol}:${entry.universe}`);
+  const options = universes.map((entry) => `<option value="${entry.protocol}:${entry.universe}">${entry.protocol === "artnet" ? "Art-Net" : "sACN"} universe ${entry.universe}</option>`).join("");
+  if (outputUniverse.dataset.options !== options) {
+    const current = outputUniverse.value;
+    outputUniverse.innerHTML = options;
+    outputUniverse.dataset.options = options;
+    if (keys.includes(current)) outputUniverse.value = current;
+  }
+  outputUniverse.hidden = universes.length < 2;
+  const shown = universes.find((entry) => `${entry.protocol}:${entry.universe}` === outputUniverse.value) || universes[0];
+  document.querySelector("#deskOutputTitle").textContent = shown
+    ? `Desk output · ${shown.protocol === "artnet" ? "Art-Net" : "sACN"} universe ${shown.universe} · ${shown.levels.filter((level) => level > 0).length} channels up`
+    : "Not hearing the desk's output yet";
+  const grid = document.querySelector("#deskOutputGrid");
+  if (!grid.children.length) {
+    grid.innerHTML = Array.from({ length: 512 }, (_, index) => `<span title="Channel ${index + 1}"></span>`).join("");
+  }
+  const levels = shown?.levels || [];
+  for (let index = 0; index < 512; index += 1) {
+    const level = levels[index] || 0;
+    const cell = grid.children[index];
+    cell.style.setProperty("--level", String(level / 255));
+    cell.title = `Channel ${index + 1}: ${Math.round((level / 255) * 100)}%`;
+  }
+}
+
 function renderDesk(desk) {
   const on = desk.enabled && desk.host;
   document.querySelector("#deskState").textContent = on ? `On · ${desk.host}:${desk.port} ${desk.transport.toUpperCase()}` : "Off";
   document.querySelector("#deskLink").dataset.online = String(Boolean(on && desk.link?.online));
   document.querySelector("#deskLinkText").textContent = on ? desk.link?.detail || "Checking…" : "Off: tick “Send GOs to the lighting desk” and enter its IP address.";
+  const output = desk.output;
+  if (on && desk.watchOutput && output) {
+    document.querySelector("#deskLinkText").textContent += output.receiving
+      ? ` · Hearing its output (${output.universes.map((entry) => `${entry.protocol === "artnet" ? "Art-Net" : "sACN"} ${entry.universe}`).join(", ")})`
+      : ` · Not hearing its output yet${output.others.length ? ` (heard lighting data from ${output.others.join(", ")}, but not the desk's IP)` : ""}`;
+  }
   renderDeskTagged(desk);
   const recent = desk.recent || [];
   const element = document.querySelector("#deskRecent");
@@ -662,6 +707,7 @@ function renderDesk(desk) {
         <strong>${entry.ok ? (entry.delivered ? "✓ Delivered" : "Sent") : "✕ Failed"} · ${escapeText(entry.describe || `cue ${entry.cue}`)}</strong>
         <code>${escapeText(entry.address)}</code>
         <span class="quiet">${escapeText(entry.source)} · ${new Date(entry.at).toLocaleTimeString()}</span>
+        ${entry.output ? `<span class="desk-output-result" data-output="${escapeText(entry.output)}" title="${escapeText(entry.outputDetail)}">${{ watching: "Watching the lights…", changed: "💡 Lights changed", unchanged: "No change seen on the desk", unknown: "Can't see the desk's output" }[entry.output] || ""}</span>` : ""}
       </div>`).join("")
     : "Nothing sent yet.";
 }
@@ -694,7 +740,9 @@ deskForm.addEventListener("submit", async (event) => {
       port: Number(deskForm.elements.port.value),
       prefix: deskForm.elements.prefix.value,
       command: deskForm.elements.command.value,
-      transport: deskForm.elements.transport.value
+      transport: deskForm.elements.transport.value,
+      watchOutput: deskForm.elements.watchOutput.checked,
+      watchUniverses: deskForm.elements.watchUniverses.value
     })
   });
   const data = await response.json().catch(() => ({}));

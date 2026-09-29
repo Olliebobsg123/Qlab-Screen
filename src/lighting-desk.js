@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import dgram from "node:dgram";
 import net from "node:net";
+import { configureDeskOutput, outputStatus, watchForChange } from "./desk-output.js";
 import { broadcastPatch } from "./events.js";
 import { encodeOsc, encodeSlip } from "./osc.js";
 import { getSettings } from "./settings.js";
@@ -176,7 +177,10 @@ export async function sendDeskAction(action, source = "") {
   const address = deskAddress(action);
   const cue = action.label;
   // delivered: written into a live connection to the desk (TCP). UDP is sent but unconfirmed.
-  const entry = { at: new Date().toISOString(), cue, label: action.label, describe: action.describe, address, source, ok: true, delivered: false, error: "" };
+  // output: what the desk's lighting output did afterwards (only when watching it):
+  // "watching", "changed", "unchanged", or "unknown" (not hearing the desk's output).
+  const entry = { at: new Date().toISOString(), cue, label: action.label, describe: action.describe, address, source, ok: true, delivered: false, error: "", output: "", outputDetail: "" };
+  const watching = desk.watchOutput ? watchForChange() : null;
   try {
     if (desk.transport === "tcp") {
       await sendTcp(encodeOsc(address, []));
@@ -190,6 +194,17 @@ export async function sendDeskAction(action, source = "") {
   }
   recent.unshift(entry);
   recent.length = Math.min(recent.length, MAX_RECENT);
+  if (watching && entry.ok) {
+    entry.output = "watching";
+    watching.then((result) => {
+      entry.output = result === null ? "unknown" : result.changed ? "changed" : "unchanged";
+      entry.outputDetail = result?.changed
+        ? `Universe ${result.universe} channel ${result.channel} moved ${(result.afterMs / 1000).toFixed(1)} s after the GO`
+        : result === null ? "Not hearing the desk's output" : "The desk's output didn't change within 3 s";
+      if (entry.output === "unchanged") logEvent("lighting-desk", `No change seen on the desk after ${action.describe}`);
+      broadcastPatch();
+    });
+  }
   logEvent("lighting-desk", `${entry.ok ? (entry.delivered ? "Delivered" : "Sent") : "FAILED"} ${action.describe} (${address})${source ? ` from ${source}` : ""}${entry.ok ? "" : `: ${entry.error}`}`);
   broadcastPatch();
   if (!entry.ok) throw Object.assign(new Error(`Could not reach the desk: ${entry.error}`), { status: 502 });
@@ -197,7 +212,7 @@ export async function sendDeskAction(action, source = "") {
 }
 
 export function deskStatus() {
-  return { ...deskSettings(), recent, link, tagged: taggedCues() };
+  return { ...deskSettings(), recent, link, tagged: taggedCues(), output: outputStatus() };
 }
 
 // What every screen gets (department pages show a desk light).
@@ -210,7 +225,7 @@ registerMetaProvider(() => {
       transport: desk.transport,
       online: link.online,
       detail: link.detail,
-      last: last ? { cue: last.cue, label: last.label, describe: last.describe, ok: last.ok, delivered: last.delivered, at: last.at, source: last.source } : null
+      last: last ? { cue: last.cue, label: last.label, describe: last.describe, output: last.output, ok: last.ok, delivered: last.delivered, at: last.at, source: last.source } : null
     }
   };
 });
@@ -228,6 +243,7 @@ export function restartDeskLink() {
 
 function checkLink() {
   const desk = deskSettings();
+  configureDeskOutput({ enabled: desk.enabled && desk.watchOutput, host: desk.host, universes: desk.watchUniverses });
   const key = `${desk.enabled}|${desk.host}|${desk.port}|${desk.transport}`;
   if (key !== linkKey) {
     linkKey = key;

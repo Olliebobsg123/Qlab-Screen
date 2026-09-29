@@ -175,10 +175,25 @@
             <span>OSC command ({cue} = desk cue number)</span>
             <input name="command" value="/zeros/cue/go/{cue}">
           </label>
+          <label class="toggle-row">
+            <input name="watchOutput" type="checkbox">
+            <span>Watch the desk's lighting output (Art-Net / sACN) to see the lights change after each GO</span>
+          </label>
+          <label>
+            <span>sACN universes to watch (Art-Net needs nothing)</span>
+            <input name="watchUniverses" value="1" placeholder="e.g. 1, 2">
+          </label>
           <div class="form-actions">
             <button type="submit">Save</button>
           </div>
         </form>
+        <div id="deskOutput" class="desk-output" hidden>
+          <div class="desk-output-head">
+            <strong id="deskOutputTitle">Desk output</strong>
+            <select id="deskOutputUniverse" aria-label="Universe"></select>
+          </div>
+          <div id="deskOutputGrid" class="desk-output-grid"></div>
+        </div>
         <div class="desk-test">
           <label>
             <span>Test (5, 2/5, P2, R2, M3)</span>

@@ -7,6 +7,7 @@ import { hasControlAuth, listControlActions, runControlAction } from "./control.
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { deskStatus, restartDeskLink, sendDeskGo } from "./lighting-desk.js";
+import { outputLevels } from "./desk-output.js";
 import { checkIn } from "./presence.js";
 import { runPreshowCheck, runPreshowFix } from "./preshow.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
@@ -207,11 +208,17 @@ async function routeRequest(request, response) {
         port: body.port ?? current.port,
         prefix: body.prefix ?? current.prefix,
         command: body.command ?? current.command,
-        transport: body.transport ?? current.transport
+        transport: body.transport ?? current.transport,
+        watchOutput: body.watchOutput ?? current.watchOutput,
+        watchUniverses: body.watchUniverses ?? current.watchUniverses
       }
     });
     restartDeskLink();
     return sendJson(response, { ok: true, ...deskStatus() });
+  }
+
+  if (url.pathname === "/api/admin/lighting-desk/output" && request.method === "GET") {
+    return sendJson(response, { universes: outputLevels() });
   }
 
   if (url.pathname === "/api/admin/lighting-desk/test" && request.method === "POST") {

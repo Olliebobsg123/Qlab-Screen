@@ -336,6 +336,12 @@ function renderDesk() {
     const tag = last.label || last.cue;
     text = !last.ok ? `${tag} failed` : last.delivered ? `${tag} → desk ✓` : `${tag} sent`;
     chipState = !last.ok ? "off" : last.delivered ? "flash" : "pending";
+    // When the desk's output is watched: did the lights actually move?
+    if (last.ok && last.output === "changed") text = `${tag} ✓ lights changed`;
+    if (last.ok && last.output === "unchanged") {
+      text = `${tag}: no change on desk`;
+      chipState = "pending";
+    }
     clearTimeout(renderDesk.timer);
     renderDesk.timer = setTimeout(renderDesk, DESK_FLASH_MS);
   }
