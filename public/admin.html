@@ -136,6 +136,10 @@
           <strong>[LX 5]</strong> anywhere in a cue's name (e.g. <em>Thunder [LX 5]</em>). When that cue starts,
           QLab Connect sends the desk a GO for its cue 5. QLab itself doesn't send anything.
         </p>
+        <div id="deskLink" class="desk-link" data-online="false">
+          <span class="desk-link-dot"></span>
+          <span id="deskLinkText">Not checked yet</span>
+        </div>
         <form id="deskForm" class="admin-form">
           <label class="toggle-row">
             <input name="enabled" type="checkbox">
@@ -148,6 +152,13 @@
           <label>
             <span>Desk OSC port</span>
             <input name="port" type="number" min="1" max="65535" inputmode="numeric" value="8830">
+          </label>
+          <label>
+            <span>Connection</span>
+            <select name="transport">
+              <option value="tcp">TCP: confirms each GO reached the desk (recommended)</option>
+              <option value="udp">UDP: sends, but can't confirm</option>
+            </select>
           </label>
           <label>
             <span>Cue name tag</span>
@@ -176,8 +187,9 @@
           <ol class="help-text">
             <li>The desk needs ZerOS 7.14 or newer (older versions have no OSC).</li>
             <li>Put the desk on the same network as this Mac, with a fixed IP address (Setup → Network).</li>
-            <li>In Setup → Triggers, turn on OSC. Leave it on UDP, port 8830.</li>
-            <li>Enter the desk's IP address above, save, and press <em>Send test GO</em>. The desk should run that cue.</li>
+            <li>In Setup → Triggers, turn on OSC and set it to <strong>TCP</strong>, port 8830 (match the Connection setting above).</li>
+            <li>Enter the desk's IP address above and save. The light at the top goes green when QLab Connect is connected to the desk.</li>
+            <li>Press <em>Send test GO</em>. The desk should run that cue.</li>
             <li>If nothing happens, try the command <code>/zeros/cue/go/1/{cue}</code> (cue on playback 1) instead.</li>
           </ol>
           <p class="help-text quiet">

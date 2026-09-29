@@ -516,9 +516,18 @@ QLab needs a paid licence to send OSC or MIDI, but QLab Connect can send it for 
 2. In QLab, name a cue **LX 5** (or put **[LX 5]** anywhere in its name, e.g. *Thunder [LX 5]*). When it starts, the desk runs its cue 5. Cue numbers like 5.5 work too. The tag can be changed from "LX".
 3. Press **Send test GO** to check the desk responds. The desk never replies, so watch the desk itself.
 
-On the FLX: ZerOS 7.14 or newer, a fixed IP address on the same network as the Mac, and OSC turned on in Setup → Triggers (UDP, port 8830). If a cue doesn't fire, try the command `/zeros/cue/go/1/{cue}`.
+On the FLX: ZerOS 7.14 or newer, a fixed IP address on the same network as the Mac, and OSC turned on in Setup → Triggers, set to **TCP**, port 8830. If a cue doesn't fire, try the command `/zeros/cue/go/1/{cue}`.
 
-Memo cues finish instantly and can be missed. Tag a cue that lasts a moment instead: the sound cue itself, a Group, or a Wait cue of half a second or more. While the link is on, QLab Connect checks QLab about 12 times a second, so the desk GO lands within about a tenth of a second of QLab's. Cues already playing when QLab Connect connects aren't sent. Every GO sent is in the show report.
+### Knowing the desk got it
+
+The desk never answers OSC, so QLab Connect uses the connection itself as the check:
+
+- **TCP (recommended):** QLab Connect keeps a connection open to the desk's OSC port. The light in Admin → Lighting desk is green only while that connection is up, and each GO is written straight into it and marked **✓ Delivered**. If the connection drops (desk rebooted, cable out), the light goes red, QLab Connect reconnects on its own, and a GO fired meanwhile makes it try to reconnect immediately. A GO that still can't get through is marked **✕ Failed**.
+- **UDP:** GOs are sent but can't be confirmed. The light only shows whether the desk answers a ping.
+
+Every department page shows a **Desk** chip while the link is on: "Desk ✓" when connected, "Desk offline" when not, and for a few seconds after each lighting GO "LX 5 → desk ✓" (or "LX 5 failed"). Every GO, delivered or failed, is in the show report.
+
+Memo cues finish instantly and can be missed. Tag a cue that lasts a moment instead: the sound cue itself, a Group, or a Wait cue of half a second or more. While the link is on, QLab Connect checks QLab about 12 times a second, so the desk GO lands within about a tenth of a second of QLab's. Cues already playing when QLab Connect connects aren't sent.
 
 ## Testing mode
 

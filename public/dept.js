@@ -135,6 +135,8 @@ function render() {
   const runningIds = new Set(running.map((cue) => cue.uniqueID));
   const standbyIds = new Set(standbyCueIds(showAll));
 
+  renderDesk();
+
   const qlab = $("#deptQlab");
   qlab.dataset.state = state.connected ? "on" : "off";
   qlab.textContent = state.connected ? "QLab connected" : "QLab offline";
@@ -316,6 +318,30 @@ async function buildPageTargets() {
   ].filter(([id]) => !allowed.length || allowed.includes(id));
   $("#pageForm").elements.target.innerHTML = options
     .map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join("");
+}
+
+// Lighting desk light: is the desk connected, and did the last lighting GO get there?
+const DESK_FLASH_MS = 5000;
+function renderDesk() {
+  const chip = $("#deptDesk");
+  const desk = state.desk;
+  chip.hidden = !desk;
+  if (!desk) return;
+  const last = desk.last;
+  const recent = last && Date.now() - Date.parse(last.at) < DESK_FLASH_MS;
+  let text = desk.online ? "Desk ✓" : "Desk offline";
+  let chipState = desk.online ? "on" : "off";
+  if (recent) {
+    text = !last.ok ? `LX ${last.cue} failed` : last.delivered ? `LX ${last.cue} → desk ✓` : `LX ${last.cue} sent`;
+    chipState = !last.ok ? "off" : last.delivered ? "flash" : "pending";
+    clearTimeout(renderDesk.timer);
+    renderDesk.timer = setTimeout(renderDesk, DESK_FLASH_MS);
+  }
+  chip.textContent = text;
+  chip.dataset.state = chipState;
+  chip.title = last
+    ? `${desk.detail}\nLast: desk cue ${last.cue} ${last.ok ? (last.delivered ? "delivered" : "sent (UDP, unconfirmed)") : "FAILED"} at ${new Date(last.at).toLocaleTimeString()}`
+    : desk.detail;
 }
 
 // --- Standbys (cue lights) for departments with the backstage-calls power ---

@@ -182,6 +182,8 @@ function normalizeLightingDesk(saved) {
     host: String(desk.host || "").trim().slice(0, 100),
     port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 8830,
     prefix: String(desk.prefix ?? "LX").trim().slice(0, 12) || "LX",
+    // "tcp" keeps a connection open, so we know the desk is listening and got each GO.
+    transport: desk.transport === "udp" ? "udp" : "tcp",
     // Zero 88 ZerOS: GO a cue on the master playback. {cue} is the desk cue number.
     command: command.startsWith("/") && command.includes("{cue}") ? command.slice(0, 120) : "/zeros/cue/go/{cue}"
   };

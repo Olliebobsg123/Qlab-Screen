@@ -3540,8 +3540,7 @@ body.focus-mode .topbar {
   .dept-shell .topbar-title { grid-area: 1 / 1; }
   .dept-shell #logoutButton { grid-area: 1 / 2; }
   .dept-shell #menuButton { grid-area: 1 / 3; }
-  .dept-shell #deptShowClock { grid-area: 2 / 1; justify-self: start; }
-  .dept-shell #deptQlab { grid-area: 2 / 2 / 3 / 4; justify-self: end; }
+  .dept-shell .status-chips { grid-area: 2 / 1 / 3 / 4; }
   .dept-shell .topnav { grid-area: 3 / 1 / 4 / 4; }
 
   .dept-shell .show-standby .go-next,
@@ -3642,4 +3641,57 @@ body.focus-mode .topbar {
 
 #tab-desk .form-message {
   margin-top: 8px;
+}
+
+/* Status chips in the department header (show clock, lighting desk, QLab). */
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.status-chip.desk-chip[data-state="flash"] {
+  border-color: var(--running);
+  background: var(--running);
+  color: #03170a;
+}
+
+@media (max-width: 900px) {
+  .dept-shell .status-chips .status-chip {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+}
+
+.desk-link {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.desk-link[data-online="true"] {
+  border-color: var(--running);
+}
+
+.desk-link[data-online="false"] {
+  border-color: var(--danger);
+}
+
+.desk-link-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.desk-link[data-online="true"] .desk-link-dot {
+  background: var(--running);
 }

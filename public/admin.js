@@ -629,17 +629,28 @@ async function loadDesk() {
   deskForm.elements.port.value = desk.port;
   deskForm.elements.prefix.value = desk.prefix;
   deskForm.elements.command.value = desk.command;
+  deskForm.elements.transport.value = desk.transport;
   renderDesk(desk);
 }
 
+// Keep the connection light live while the Lighting desk tab is open.
+setInterval(async () => {
+  if (document.querySelector("#tab-desk").hidden || document.hidden) return;
+  const desk = await fetch("/api/admin/lighting-desk", { cache: "no-store" }).then((response) => response.json()).catch(() => null);
+  if (desk) renderDesk(desk);
+}, 2000);
+
 function renderDesk(desk) {
-  document.querySelector("#deskState").textContent = desk.enabled && desk.host ? `On · ${desk.host}:${desk.port}` : "Off";
+  const on = desk.enabled && desk.host;
+  document.querySelector("#deskState").textContent = on ? `On · ${desk.host}:${desk.port} ${desk.transport.toUpperCase()}` : "Off";
+  document.querySelector("#deskLink").dataset.online = String(Boolean(on && desk.link?.online));
+  document.querySelector("#deskLinkText").textContent = on ? desk.link?.detail || "Checking…" : "Off: tick “Send GOs to the lighting desk” and enter its IP address.";
   const recent = desk.recent || [];
   const element = document.querySelector("#deskRecent");
   element.innerHTML = recent.length
     ? recent.map((entry) => `
       <div class="desk-entry ${entry.ok ? "" : "failed"}">
-        <strong>${entry.ok ? "GO" : "Failed"} ${escapeText(entry.cue)}</strong>
+        <strong>${entry.ok ? (entry.delivered ? "✓ Delivered" : "Sent") : "✕ Failed"} · cue ${escapeText(entry.cue)}</strong>
         <code>${escapeText(entry.address)}</code>
         <span class="quiet">${escapeText(entry.source)} · ${new Date(entry.at).toLocaleTimeString()}</span>
       </div>`).join("")
@@ -656,12 +667,14 @@ deskForm.addEventListener("submit", async (event) => {
       host: deskForm.elements.host.value,
       port: Number(deskForm.elements.port.value),
       prefix: deskForm.elements.prefix.value,
-      command: deskForm.elements.command.value
+      command: deskForm.elements.command.value,
+      transport: deskForm.elements.transport.value
     })
   });
   const data = await response.json().catch(() => ({}));
-  deskMessage.textContent = response.ok ? "Saved." : data.error || "Could not save.";
+  deskMessage.textContent = response.ok ? "Saved. Checking the connection…" : data.error || "Could not save.";
   if (response.ok) {
+    setTimeout(loadDesk, 1500);
     deskForm.elements.command.value = data.command;
     deskForm.elements.prefix.value = data.prefix;
     deskForm.elements.port.value = data.port;
@@ -677,7 +690,9 @@ document.querySelector("#deskTestButton").addEventListener("click", async () => 
   });
   const data = await response.json().catch(() => ({}));
   deskMessage.textContent = response.ok
-    ? `Sent ${data.entry.address}. The desk doesn't reply, so check it ran the cue.`
+    ? (data.entry.delivered
+      ? `Delivered ${data.entry.address} to the desk. Check it ran that cue.`
+      : `Sent ${data.entry.address} over UDP (can't be confirmed). Check the desk ran that cue.`)
     : data.error || "Could not send.";
   loadDesk();
 });

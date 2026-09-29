@@ -17,7 +17,15 @@ const DESK_POLL_MS = 80;
 let lastPollAt = 0;
 const TIMING_MS = 250;
 // New, renamed or deleted cues show up within about half a second, even if QLab doesn't announce them.
+// Fetching every cue is QLab's heaviest question, and it shares the line with GO commands, so it
+// is asked less often while cues are playing or just after a command, and less often again if
+// this workspace is slow to describe (so a big show never keeps QLab busy).
 const CUE_LIST_MS = 500;
+const CUE_LIST_BUSY_MS = 3000;
+const CUE_LIST_TICK_MS = 100;
+let nextCueListAt = 0;
+let lastCueListMs = 0;
+let lastCommandAt = 0;
 const PLAYHEAD_MS = 1000;
 const PLAYHEAD_BACKOFF_MS = 30_000;
 let openWorkspaces = [];
@@ -102,6 +110,9 @@ export async function connectToQlab(connection) {
   playheadField = "";
   resetRunningTracking();
   resetDeskTracking();
+  // Plain commands (GO, start, stop) get no answer unless asked for one, which left every
+  // button waiting for a reply that never came.
+  await send(host, "/alwaysReply", [1]).catch(() => {});
   await send(host, `/workspace/${state.workspaceId}/updates`, [1]);
   await refreshAll();
   await refreshAllPlayheads();
@@ -109,7 +120,8 @@ export async function connectToQlab(connection) {
   pollTimer = setInterval(() => {
     if (deskActive() || Date.now() - lastPollAt >= POLL_MS - DESK_POLL_MS / 2) refreshAll();
   }, DESK_POLL_MS);
-  cueListTimer = setInterval(refreshCueLists, CUE_LIST_MS);
+  nextCueListAt = 0;
+  cueListTimer = setInterval(refreshCueLists, CUE_LIST_TICK_MS);
   timingTimer = setInterval(refreshTiming, TIMING_MS);
   playheadTimer = setInterval(refreshActivePlayhead, PLAYHEAD_MS);
   thumpTimer = setInterval(() => send(host, `/workspace/${state.workspaceId}/thump`).catch(() => {}), 15000);
@@ -409,8 +421,9 @@ function handleConnectionLost() {
 
 // Re-read every cue list twice a second; screens only get a new list when something changed.
 async function refreshCueLists() {
-  if (!state.connected || cueListBusy) return;
+  if (!state.connected || cueListBusy || Date.now() < nextCueListAt) return;
   cueListBusy = true;
+  const startedAt = Date.now();
   try {
     const reply = await query(state.host, `/workspace/${state.workspaceId}/cueLists`, [], 5000);
     if (markCuesIfChanged(flattenCues(asArray(reply.data)))) broadcastChanges();
@@ -418,7 +431,17 @@ async function refreshCueLists() {
     // Try again next round.
   } finally {
     cueListBusy = false;
+    lastCueListMs = Date.now() - startedAt;
+    const showBusy = state.running.length > 0 || Date.now() - lastCommandAt < CUE_LIST_BUSY_MS;
+    nextCueListAt = Date.now() + Math.max(showBusy ? CUE_LIST_BUSY_MS : CUE_LIST_MS, lastCueListMs * 10);
   }
+}
+
+// QLab said something changed: fetch the cue list soon, but not in the middle of a burst of GOs.
+function requestCueListRefresh() {
+  const soon = Date.now() + Math.max(250, lastCueListMs * 4);
+  if (Date.now() - lastCommandAt < 1000) return;
+  nextCueListAt = Math.min(nextCueListAt, soon);
 }
 
 function closeQlabConnection() {
@@ -483,8 +506,9 @@ function normalizeReply(packet) {
     }
     const cueMatch = packet.address.match(/\/cue_id\/([^/]+)$/);
     if (cueMatch) staleNotes.add(cueMatch[1]);
-    const forceCues = !playheadMatch;
-    refreshAll(forceCues).catch((error) => {
+    // QLab also announces cues starting and stopping, so don't re-read every cue straight away.
+    if (!playheadMatch) requestCueListRefresh();
+    refreshAll().catch((error) => {
       state.lastError = error.message;
       broadcastPatch();
     });
@@ -670,14 +694,22 @@ export async function sendWorkspaceCommand(path, args = []) {
   }
 
   const address = `/workspace/${state.workspaceId}${path}`;
+  lastCommandAt = Date.now();
   let reply;
   try {
-    reply = await query(state.host, address, args, 1500);
+    reply = await query(state.host, address, args, 500);
   } catch (error) {
     // Some QLab versions don't reply to every command; the message itself was written.
-    if (/Timed out/.test(error.message)) return { status: "sent" };
+    if (/Timed out/.test(error.message)) {
+      refreshAll().catch(() => {});
+      return { status: "sent" };
+    }
     throw error;
+  } finally {
+    lastCommandAt = Date.now();
   }
+  // Show what the command started or stopped straight away rather than at the next check.
+  refreshAll().catch(() => {});
 
   if (reply.status && reply.status !== "ok") {
     const error = new Error(reply.status === "denied"

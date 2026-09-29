@@ -17,8 +17,11 @@
         </div>
         <nav id="deptNav" class="topnav" aria-label="Pages" data-nav></nav>
         <div class="topbar-actions">
-          <span id="deptShowClock" class="status-chip show-clock" data-state="idle" hidden></span>
-          <span id="deptQlab" class="status-chip" data-state="off">QLab</span>
+          <span class="status-chips">
+            <span id="deptShowClock" class="status-chip show-clock" data-state="idle" hidden></span>
+            <span id="deptDesk" class="status-chip desk-chip" data-state="off" hidden title="Lighting desk">Desk</span>
+            <span id="deptQlab" class="status-chip" data-state="off">QLab</span>
+          </span>
           <button id="logoutButton" type="button" class="tool-button">Log out</button>
           <button id="menuButton" type="button" class="tool-button menu-button" aria-expanded="false" aria-controls="deptNav">Menu</button>
         </div>

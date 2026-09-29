@@ -321,9 +321,19 @@ export async function runDepartmentAction(department, body = {}) {
     }
     if (action === "go") {
       detail = `GO ${cueLabel(current)}`;
-      await sendWorkspaceCommand(`/cue_id/${current}/start`);
+      // Move on before waiting for QLab, so the screen shows the next cue at once and a quick
+      // second GO fires the next cue rather than this one again.
+      const before = cursors.get(department.id);
       if (index < sequence.length - 1) setCursor(department, sequence[index + 1].uniqueID);
       else setCursor(department, END);
+      broadcastPatch();
+      try {
+        await sendWorkspaceCommand(`/cue_id/${current}/start`);
+      } catch (error) {
+        if (before) cursors.set(department.id, before);
+        else cursors.delete(department.id);
+        throw error;
+      }
     } else {
       const step = action === "next" ? 1 : -1;
       const target = sequence[Math.max(0, Math.min(sequence.length - 1, index + step))];
