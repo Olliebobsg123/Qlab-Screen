@@ -10,13 +10,13 @@
 // sender id (uint32) | seq (uint16) | sample count (uint16) | 16-bit samples or a float64 time.
 
 // Shown in the comms panel, so you can tell whether a device has the latest comms code.
-export const COMMS_BUILD = 7;
+export const COMMS_BUILD = 8;
 
 const HEADER = 12;
 const KIND_AUDIO = 0;
 const KIND_PING = 1;
 const KIND_PONG = 2;
-const PING_MS = 2000;
+const PING_MS = 1000;
 
 export function nativeAvailable() {
   return Boolean(globalThis.qlabNative?.openAudioSocket);
@@ -80,8 +80,11 @@ export class FastAudio {
       key: `dc:${peerId}`,
       wide: false,
       send: (packet) => {
-        // Skip rather than queue if the channel is backed up: late audio is worse than a gap.
-        if (channel.readyState === "open" && channel.bufferedAmount < 16384) channel.send(packet);
+        // Skip rather than queue if the channel is badly backed up (a Wi-Fi stall): past that,
+        // late audio is worse than a gap, and the receiver covers a gap smoothly. Short stalls
+        // are let through; the receiver catches up on them without skipping.
+        if (channel.readyState === "open" && channel.bufferedAmount < 8192) channel.send(packet);
+        else this.skipped = (this.skipped || 0) + 1;
       }
     };
   }
@@ -96,39 +99,39 @@ export class FastAudio {
     this.mixer?.port.postMessage({ type: "volume", id: senderId, value });
   }
 
-  sendFrame(frame) {
+  // frames: { wide: 48 kHz, narrow: filtered 24 kHz } from the capture worklet.
+  sendFrame(frames) {
+    // Every captured frame gets the next number, whether or not anyone hears it, so receivers
+    // can spot a missing frame.
+    this.seq = (this.seq + 1) & 0xffff;
     if (!this.targets.length) return;
     let wide = null;
     let narrow = null;
     for (const target of this.targets) {
-      if (target.wide) target.send(wide ??= this.packAudio(frame, 1));
-      else target.send(narrow ??= this.packAudio(frame, 2));
+      if (target.wide) target.send(wide ??= this.packAudio(frames.wide, 1));
+      else target.send(narrow ??= this.packAudio(frames.narrow, 2));
     }
   }
 
   packAudio(frame, version) {
-    const step = version === 2 ? 2 : 1;
-    const count = Math.floor(frame.length / step);
-    const packet = new ArrayBuffer(HEADER + count * 2);
+    const packet = new ArrayBuffer(HEADER + frame.length * 2);
     const view = new DataView(packet);
-    this.writeHeader(view, version, KIND_AUDIO, count);
+    this.writeHeader(view, version, KIND_AUDIO, frame.length, this.seq);
     const samples = new Int16Array(packet, HEADER);
-    for (let index = 0; index < count; index += 1) {
-      // 24 kHz: average each pair (a simple filter against harshness), then keep one.
-      const raw = step === 2 ? (frame[index * 2] + frame[index * 2 + 1]) / 2 : frame[index];
-      const value = Math.max(-1, Math.min(1, raw));
+    for (let index = 0; index < frame.length; index += 1) {
+      const value = Math.max(-1, Math.min(1, frame[index]));
       samples[index] = value < 0 ? value * 0x8000 : value * 0x7fff;
     }
     return packet;
   }
 
-  writeHeader(view, version, kind, count) {
+  writeHeader(view, version, kind, count, seq = 0) {
     view.setUint8(0, 0x51);
     view.setUint8(1, 0x43);
     view.setUint8(2, version);
     view.setUint8(3, kind);
     view.setUint32(4, idNumber(this.myId), true);
-    view.setUint16(8, this.seq = (this.seq + 1) & 0xffff, true);
+    view.setUint16(8, seq, true);
     view.setUint16(10, count, true);
   }
 
@@ -143,21 +146,11 @@ export class FastAudio {
     if (kind === KIND_AUDIO) {
       const count = Math.min(view.getUint16(10, true), (buffer.byteLength - HEADER) / 2);
       const pcm = new Int16Array(buffer, HEADER, count);
-      let samples;
-      if (version === 2) {
-        // Back up to 48 kHz by drawing a straight line between each pair of samples.
-        samples = new Float32Array(count * 2);
-        for (let index = 0; index < count; index += 1) {
-          const current = pcm[index] / 0x8000;
-          const next = index + 1 < count ? pcm[index + 1] / 0x8000 : current;
-          samples[index * 2] = current;
-          samples[index * 2 + 1] = (current + next) / 2;
-        }
-      } else {
-        samples = new Float32Array(count);
-        for (let index = 0; index < count; index += 1) samples[index] = pcm[index] / 0x8000;
-      }
-      this.mixer?.port.postMessage({ type: "frame", id: sender, samples }, [samples.buffer]);
+      // 24 kHz frames are brought back to 48 kHz (filtered) in the mixer.
+      const samples = new Float32Array(count);
+      for (let index = 0; index < count; index += 1) samples[index] = pcm[index] / 0x8000;
+      const seq = view.getUint16(8, true);
+      this.mixer?.port.postMessage({ type: "frame", id: sender, seq, samples, narrow: version === 2 }, [samples.buffer]);
     } else if (kind === KIND_PING && buffer.byteLength >= HEADER + 8) {
       const reply = buffer.slice(0);
       const replyView = new DataView(reply);
@@ -165,7 +158,10 @@ export class FastAudio {
       replyView.setUint32(4, idNumber(this.myId), true);
       from.send(reply);
     } else if (kind === KIND_PONG && buffer.byteLength >= HEADER + 8) {
-      this.rtt.set(from.key, performance.now() - view.getFloat64(HEADER, true));
+      // Keep the last few round trips; the readout uses the middle one, so one slow Wi-Fi moment
+      // doesn't make the number jump.
+      const recent = [...(this.rtt.get(from.key) || []), performance.now() - view.getFloat64(HEADER, true)].slice(-5);
+      this.rtt.set(from.key, recent);
     }
   }
 
@@ -184,8 +180,8 @@ export class FastAudio {
   // Delay parts for the comms panel.
   latencyParts() {
     if (!this.rtt.size) return null;
-    const rtts = [...this.rtt.values()];
-    const network = rtts.reduce((a, b) => a + b, 0) / rtts.length / 2;
+    const medians = [...this.rtt.values()].map((list) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)]);
+    const network = medians.reduce((a, b) => a + b, 0) / medians.length / 2;
     const output = ((this.context.baseLatency || 0) + (this.context.outputLatency || 0)) * 1000;
     const capture = (this.micStream?.getAudioTracks()[0]?.getSettings?.().latency || 0.005) * 1000;
     return {
