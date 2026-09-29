@@ -11,7 +11,7 @@
 
 const FRAME = 240; // 5 ms at 48 kHz
 const FRAME_MS = 5;
-const MIN_TARGET_MS = 10;
+const MIN_TARGET_MS = 5; // on a steady network; grows automatically on uneven Wi-Fi
 const MAX_TARGET_MS = 45;
 const CONCEAL_FRAMES = 12; // cover up to ~30 ms (12 x 128 samples) of missing audio before going quiet
 const HARD_LIMIT_MS = 90; // beyond this, jump straight back to the target

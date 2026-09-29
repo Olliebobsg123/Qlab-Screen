@@ -10,7 +10,7 @@
 // sender id (uint32) | seq (uint16) | sample count (uint16) | 16-bit samples or a float64 time.
 
 // Shown in the comms panel, so you can tell whether a device has the latest comms code.
-export const COMMS_BUILD = 8;
+export const COMMS_BUILD = 9;
 
 const HEADER = 12;
 const KIND_AUDIO = 0;
