@@ -605,6 +605,8 @@ Headset-style talkback between departments, in the browser: no beltpacks, just p
 
 How it works: audio goes directly between devices over WebRTC (Opus), not through the server; the server only introduces devices and shares who's talking where. Each device only plays voices on channels it listens to, and your mic only sends while TALK is held. Delay is typically 40–100 ms end to end on a good network: fine for calling cues and chatting, like a phone call but quicker. It's not meant for musicians' in-ear monitoring. Wired computers and a good 5 GHz Wi-Fi network help most.
 
+**If the delay is high:** open **Channels** in the comms dock and read the breakdown ("network · buffer · devices"). A big **buffer** means packets are arriving unevenly: usually a phone far from the router, 2.4 GHz Wi-Fi, or a busy network. **Bluetooth headphones add another 150–250 ms** that the number can't see, so use wired headphones for comms. Echo cancelling is off by default because everyone should be on headphones; tick *Not using headphones* if someone isn't.
+
 Keep the page open and the screen on: phones stop the microphone when the page is in the background or the screen locks (the page asks the phone to stay awake where it can). Every device connects to every other one, which is fine for a show team (around 15–20 devices).
 
 ## Testing mode

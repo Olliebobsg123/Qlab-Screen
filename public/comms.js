@@ -4,13 +4,18 @@
 // Every device connects to every other one; each decides for itself which voices to play, so a
 // voice on a channel you don't listen to stays silent. Your mic only sends while you hold TALK.
 
-const VOICE_FMTP = "useinbandfec=1;usedtx=1";
+// No DTX (silence suppression): with it, a quiet line sends a packet every ~400 ms, the receiver
+// takes the gaps for a bad network and grows its buffer, adding hundreds of ms to every voice.
+const VOICE_FMTP = "useinbandfec=1;usedtx=0;minptime=10";
 const FEED_FMTP = "stereo=1;sprop-stereo=1;maxaveragebitrate=128000;useinbandfec=1;usedtx=0";
 
 export class CommsClient {
   // mode: "user" (mic, talk/listen) or "feed" (sends one input to listeners, receives nothing).
   // getTicket(): Promise<{ ticket, channels, feedName }>. onChange(): called when anything changes.
-  constructor({ mode = "user", getTicket, onChange = () => {}, feedStream = null }) {
+  // echoCancellation: only needed without headphones; it adds delay (and on iPhones switches the
+  // mic to a slower voice-processing mode), so it's off unless asked for.
+  constructor({ mode = "user", getTicket, onChange = () => {}, feedStream = null, echoCancellation = false }) {
+    this.echoCancellation = echoCancellation;
     this.mode = mode;
     this.getTicket = getTicket;
     this.onChange = onChange;
@@ -50,7 +55,13 @@ export class CommsClient {
     if (this.mode === "user") {
       try {
         this.micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
+          audio: {
+            echoCancellation: this.echoCancellation,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+            latency: { ideal: 0.01 }
+          }
         });
         this.micTrack = this.micStream.getAudioTracks()[0];
         this.micTrack.enabled = false;
@@ -319,23 +330,17 @@ export class CommsClient {
     // Ask for the smallest safe buffer: lowest delay on a good network.
     if ("jitterBufferTarget" in event.receiver) event.receiver.jitterBufferTarget = 0;
     else if ("playoutDelayHint" in event.receiver) event.receiver.playoutDelayHint = 0;
+    conn.receiver = event.receiver;
     const stream = event.streams[0] || new MediaStream([event.track]);
-    // Chrome only plays WebRTC audio through Web Audio if an audio element is also attached.
+    // Play through a plain audio element: the phone's direct, low-delay path for call audio.
+    // (Routing through Web Audio for volume control added a noticeable delay, especially on iPhone.)
     const element = new Audio();
+    element.autoplay = true;
+    element.playsInline = true;
     element.srcObject = stream;
     element.muted = true;
     element.play().catch(() => {});
     conn.element = element;
-    try {
-      const source = this.audioContext.createMediaStreamSource(stream);
-      const gain = this.audioContext.createGain();
-      gain.gain.value = 0;
-      source.connect(gain).connect(this.audioContext.destination);
-      conn.gain = gain;
-    } catch {
-      // No Web Audio for this stream: fall back to the element, switched on and off.
-      conn.gain = null;
-    }
     this.applyGains();
   }
 
@@ -343,8 +348,10 @@ export class CommsClient {
     const conn = this.conns.get(peerId);
     if (!conn) return;
     this.conns.delete(peerId);
-    conn.gain?.disconnect();
-    if (conn.element) conn.element.srcObject = null;
+    if (conn.element) {
+      conn.element.pause();
+      conn.element.srcObject = null;
+    }
     conn.pc.close();
   }
 
@@ -357,15 +364,19 @@ export class CommsClient {
     return channels.length ? Math.max(...channels.map((id) => this.volumes[id] ?? 0.9)) : 0;
   }
 
+  // Voices you shouldn't hear are muted; the rest play at their channel's volume (iPhones ignore
+  // page volume, so there it's the phone's volume buttons).
   applyGains() {
-    const now = this.audioContext?.currentTime || 0;
     for (const [peerId, conn] of this.conns) {
+      if (!conn.element) continue;
       const level = this.levelFor(this.peers.find((peer) => peer.id === peerId));
-      if (conn.gain) conn.gain.gain.setTargetAtTime(level, now, 0.01);
-      else if (conn.element) {
-        conn.element.muted = level === 0;
-        try { conn.element.volume = level || 1; } catch { /* iOS: fixed volume */ }
+      conn.element.muted = level === 0;
+      try {
+        conn.element.volume = level || 1;
+      } catch {
+        // Fixed volume on this device.
       }
+      if (level > 0 && conn.element.paused) conn.element.play().catch(() => {});
     }
   }
 
@@ -386,25 +397,41 @@ export class CommsClient {
     tick();
   }
 
-  // Rough mouth-to-ear delay from the live connection stats: half the round trip, the receive
-  // buffer, plus about 40 ms for recording, encoding and playing a 20 ms Opus frame.
+  // Mouth-to-ear delay from the live connection stats, measured over the last couple of seconds
+  // (not since joining, so an early rough patch doesn't stick): half the network round trip, the
+  // receive buffer right now, and the devices (recording, one Opus frame, playing).
   async measureLatency() {
-    const samples = [];
+    const parts = [];
     for (const conn of this.conns.values()) {
-      if (conn.pc.connectionState !== "connected") continue;
+      if (conn.pc.connectionState !== "connected" || conn.feed) continue;
       const stats = await conn.pc.getStats().catch(() => null);
       if (!stats) continue;
       let rtt = null;
-      let buffer = null;
+      let inbound = null;
       stats.forEach((report) => {
         if (report.type === "candidate-pair" && report.nominated && report.currentRoundTripTime != null) rtt = report.currentRoundTripTime * 1000;
-        if (report.type === "inbound-rtp" && report.kind === "audio" && report.jitterBufferEmittedCount) {
-          buffer = (report.jitterBufferDelay / report.jitterBufferEmittedCount) * 1000;
-        }
+        if (report.type === "inbound-rtp" && report.kind === "audio") inbound = report;
       });
-      if (rtt != null) samples.push(rtt / 2 + (buffer ?? 20) + 40);
+      let buffer = null;
+      if (inbound?.jitterBufferEmittedCount) {
+        const previous = conn.lastInbound;
+        const emitted = inbound.jitterBufferEmittedCount - (previous?.jitterBufferEmittedCount || 0);
+        const delay = inbound.jitterBufferDelay - (previous?.jitterBufferDelay || 0);
+        if (emitted > 0) buffer = (delay / emitted) * 1000;
+        conn.lastInbound = { jitterBufferEmittedCount: inbound.jitterBufferEmittedCount, jitterBufferDelay: inbound.jitterBufferDelay };
+      }
+      if (rtt != null) parts.push({ network: rtt / 2, buffer: buffer ?? 20 });
     }
-    this.latencyMs = samples.length ? Math.round(samples.reduce((a, b) => a + b, 0) / samples.length) : null;
+    if (!parts.length) {
+      this.latencyMs = null;
+      this.latencyParts = null;
+    } else {
+      const average = (key) => parts.reduce((total, part) => total + part[key], 0) / parts.length;
+      const captureMs = (this.micTrack?.getSettings?.().latency || 0.01) * 1000;
+      const device = captureMs + 20 + 15; // recording + one 20 ms Opus frame + playing out
+      this.latencyParts = { network: Math.round(average("network")), buffer: Math.round(average("buffer")), device: Math.round(device) };
+      this.latencyMs = this.latencyParts.network + this.latencyParts.buffer + this.latencyParts.device;
+    }
     this.onChange();
   }
 

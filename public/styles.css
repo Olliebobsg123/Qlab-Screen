@@ -4188,3 +4188,18 @@ body:has(.comms-dock:not([hidden])) .shell {
   width: 14px;
   height: 36px;
 }
+
+.comms-breakdown {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.comms-breakdown:empty {
+  display: none;
+}
+
+.comms-option span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}

@@ -44,7 +44,7 @@ export async function setupComms({ fetchComms }) {
     if (!target) return;
     const action = target.dataset.comms;
     if (action === "join") {
-      client = new CommsClient({ mode: "user", getTicket: fetchComms, onChange: () => update() });
+      client = new CommsClient({ mode: "user", getTicket: fetchComms, onChange: () => update(), echoCancellation: Boolean(prefs.noHeadphones) });
       for (const id of prefs.listen || []) client.listen.add(id);
       Object.assign(client.volumes, prefs.volumes || {});
       client.feedOn = Boolean(prefs.feed);
@@ -64,6 +64,18 @@ export async function setupComms({ fetchComms }) {
     const listen = event.target.closest("[data-listen]");
     if (listen) client.setListen(listen.dataset.listen, listen.checked);
     if (event.target.closest("[data-feed]")) client.setFeed(event.target.checked);
+    if (event.target.closest("[data-no-headphones]")) {
+      // Echo cancelling is set when the mic opens: rejoin to apply it.
+      prefs.noHeadphones = event.target.checked;
+      savePrefs();
+      client.stop();
+      client = new CommsClient({ mode: "user", getTicket: fetchComms, onChange: () => update(), echoCancellation: prefs.noHeadphones });
+      for (const id of prefs.listen || []) client.listen.add(id);
+      Object.assign(client.volumes, prefs.volumes || {});
+      client.feedOn = Boolean(prefs.feed);
+      client.start().then(render);
+      return;
+    }
     savePrefs();
   });
   dock.addEventListener("input", (event) => {
@@ -164,6 +176,10 @@ export async function setupComms({ fetchComms }) {
       feedRow.classList.toggle("active", Boolean(source && client.feedOn));
     }
     setText(".comms-error", client.error);
+    const parts = client.latencyParts;
+    setText(".comms-breakdown", parts
+      ? `Delay ≈${client.latencyMs} ms: network ${parts.network} ms · buffer ${parts.buffer} ms · devices ${parts.device} ms${parts.buffer > 80 ? " (a big buffer means an uneven connection: move closer to the router or use 5 GHz Wi-Fi)" : ""}`
+      : "");
     const meter = dock.querySelector(".comms-mic-level");
     if (meter) meter.style.setProperty("--level", String(Math.min(1, (client.micLevel || 0) * 3)));
   }
@@ -199,6 +215,8 @@ export async function setupComms({ fetchComms }) {
           <input type="range" min="0" max="1" step="0.05" value="${client?.volumes.feed ?? 0.8}" data-volume="feed" aria-label="Show feed volume">
           <span></span>
         </div>
+        <p class="comms-breakdown quiet"></p>
+        <label class="comms-listen comms-option"><input type="checkbox" data-no-headphones ${prefs.noHeadphones ? "checked" : ""}><span>Not using headphones (turns on echo cancelling, adds a little delay)</span></label>
         <p class="comms-error"></p>
         <p class="comms-help quiet">Hold TALK to talk, or double-tap it to stay on (tap again to stop). Use headphones, and keep this screen on.</p>
         <button type="button" class="secondary small-button" data-comms="leave">Leave comms</button>
@@ -213,7 +231,7 @@ export async function setupComms({ fetchComms }) {
   function savePrefs() {
     if (!client) return;
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ listen: [...client.listen], volumes: client.volumes, feed: client.feedOn }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ listen: [...client.listen], volumes: client.volumes, feed: client.feedOn, noHeadphones: Boolean(prefs.noHeadphones) }));
     } catch {
       // Not remembered in private browsing.
     }
