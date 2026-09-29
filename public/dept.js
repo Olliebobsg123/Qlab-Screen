@@ -196,7 +196,7 @@ function renderGoCards(cueMap) {
       <div class="panel go-card ${called ? "called" : ""}">
         <div class="go-card-head">
           <div class="go-card-top">
-            <span class="eyebrow">${called ? `Standby from ${escapeHtml(light.by || "stage manager")}` : `${escapeHtml(list.name)} · next`}</span>
+            <span class="eyebrow">${called ? (light.auto ? "Automatic standby" : `Standby from ${escapeHtml(light.by || "stage manager")}`) : `${escapeHtml(list.name)} · next`}</span>
             ${standby ? `<button type="button" class="tool-button small-button" data-open-cue="${escapeHtml(standby.uniqueID)}">Options</button>` : ""}
           </div>
           <div class="go-next">
@@ -464,6 +464,28 @@ function setupCuePanel() {
     openCue = null;
   });
 
+  $("#noteSave").addEventListener("click", async () => {
+    const text = $("#noteText").value.trim();
+    if (!openCue || !text) return;
+    $("#noteSave").disabled = true;
+    try {
+      const response = await deptFetch(withQuery("/api/dept/action"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "addNote", cueId: openCue.cueId, text })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Couldn't save the note.");
+      $("#noteText").value = "";
+      if (data.notes) openCue.notes = data.notes;
+      renderCuePanel();
+      toast(data.savedToQlab ? "Note added to QLab" : `Note saved in the report. ${data.reason}`, !data.savedToQlab);
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      $("#noteSave").disabled = false;
+    }
+  });
   $("#panelAck").addEventListener("click", () => act({ action: "cueLightAck" }, "Standing by"));
   $("#panelStart").addEventListener("click", () => cueAction("start", "Started"));
   $("#panelStop").addEventListener("click", () => cueAction("stop", "Stopped"));
@@ -531,13 +553,13 @@ function renderCuePanel() {
   const running = isOpenCueRunning();
   const live = liveTiming(state.time?.[cue.uniqueID]);
   const duration = openCue.duration || live.duration;
-  const notes = getCueNotes(state, cue.uniqueID);
+  const notes = getCueNotes(state, cue.uniqueID) || openCue.notes || "";
   const standbyIds = new Set(standbyCueIds(Boolean(view.showAll)));
 
   const light = state.cueLights?.[view.department.id];
   const called = light?.cueId === cue.uniqueID && ["standby", "ready"].includes(light.state);
   $("#panelAck").hidden = !(called && light.state === "standby");
-  $("#panelType").textContent = `${formatType(cue.type)}${called ? ` · standby from ${light.by || "stage manager"}` : standbyIds.has(cue.uniqueID) ? " · next" : ""}`;
+  $("#panelType").textContent = `${formatType(cue.type)}${called ? (light.auto ? " · automatic standby" : ` · standby from ${light.by || "stage manager"}`) : standbyIds.has(cue.uniqueID) ? " · next" : ""}`;
   $("#panelNumber").textContent = cue.number || "";
   $("#panelName").textContent = cueName(cue);
   $("#panelNotes").hidden = !notes;

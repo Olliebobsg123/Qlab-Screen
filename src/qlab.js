@@ -668,6 +668,15 @@ function refreshNotes() {
   state.notes = notes;
 }
 
+// Replace a cue's notes in QLab (the passcode needs edit access), and show them straight away.
+export async function writeCueNotes(id, text) {
+  await sendWorkspaceCommand(`/cue_id/${id}/notes`, [text]);
+  notesCache.set(id, text.trim());
+  staleNotes.add(id);
+  refreshNotes();
+  broadcastChanges();
+}
+
 async function loadNotes(id) {
   if (notesInFlight.has(id) || !state.connected) return;
   notesInFlight.add(id);

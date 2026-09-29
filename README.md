@@ -550,6 +550,12 @@ Each department page checks in every 10 seconds. The Stage Manager's **Standbys*
 
 In Admin → Departments, set **Automatic standby** on a department: *when its cue is the next GO*, or *1, 2, 3 or 5 cues before*. As the show's playhead gets that close to the department's next cue, its standby light comes on by itself with the cue named. When that cue plays (whoever fires it) the light shows GO and clears; if the show moves past it without playing it, the light clears. The Stage Manager sees "auto" next to these in the Standbys tab. A standby the Stage Manager sends by hand is never changed. This counts cues in the main cue list, so it works for cues in the show's list (a department that runs its own separate cue list isn't counted).
 
+## Rehearsal notes
+
+In tech, anyone can tap one of their cues (or **Options** on the GO card), type a note in the box at the bottom of the cue panel and press **Add note**. It's added to the end of that cue's notes in QLab, stamped with the department and time, e.g. `[Sound 19:42] fade too slow`, so it's there when you sit down to fix things. Every note also goes into the show report (Report page and CSV) as a single list.
+
+Writing into QLab needs the OSC passcode to have **edit** access (QLab → Workspace Settings → Network). Without it the note is still saved in the report, and the page says why it didn't reach QLab.
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

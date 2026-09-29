@@ -487,7 +487,7 @@ export function renderCueLightBanner(state, departmentId, { onAck } = {}) {
   cueLightBanner.querySelector(".cue-light-cue").textContent = light.cue || "";
   cueLightBanner.querySelector(".cue-light-by").textContent = light.state === "ready"
     ? "Waiting for GO"
-    : light.by ? `from ${light.by}` : "";
+    : light.auto ? "automatic" : light.by ? `from ${light.by}` : "";
   cueLightBanner.querySelector(".cue-light-ack").hidden = !(onAck && light.state === "standby");
   // A buzz on phones that support it, so operators notice without looking.
   if (light.state === "standby") navigator.vibrate?.(250);

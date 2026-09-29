@@ -4,7 +4,7 @@ import { runControlAction } from "./control.js";
 import { getCueLight, publicCueLights, setCueLight } from "./cuelights.js";
 import { broadcastPatch } from "./events.js";
 import { getClientIp } from "./http-utils.js";
-import { listPlayhead, queryCueValue, registerNoteIds, sendWorkspaceCommand, setPlayhead } from "./qlab.js";
+import { listPlayhead, queryCueValue, registerNoteIds, sendWorkspaceCommand, setPlayhead, writeCueNotes } from "./qlab.js";
 import { DEPARTMENT_PERMISSIONS, controlSettings, getDepartments, getSettings, saveDepartments, sessionSecret } from "./settings.js";
 import { withDeskStart } from "./lighting-desk.js";
 import { logEvent } from "./show.js";
@@ -359,6 +359,7 @@ export async function runDepartmentAction(department, body = {}) {
     logEvent("cue-light", `${department.name}: standing by${light.cue ? ` for ${light.cue}` : ""}`);
     return { ok: true };
   }
+  if (action === "addNote") return addRehearsalNote(department, body);
   if (!controlSettings().enabled) throw httpError(403, "QLab control is turned off. Ask the admin to turn it on.");
   const anyCue = department.permissions.includes("anyCue");
   const owned = new Set(anyCue ? state.cues.filter((cue) => cue.depth > 0).map((cue) => cue.uniqueID) : departmentCueIds(department));
@@ -476,6 +477,38 @@ export async function runDepartmentAction(department, body = {}) {
   return { ok: true };
 }
 
+// Rehearsal notes: added to the end of the cue's notes in QLab, stamped with who and when, and
+// kept in the show report either way (so a passcode without edit access doesn't lose them).
+async function addRehearsalNote(department, body) {
+  const id = String(body.cueId || "");
+  const anyCue = department.permissions.includes("anyCue");
+  if (!anyCue && !departmentCueIds(department).includes(id)) throw httpError(403, "That cue doesn't belong to your department.");
+  const cue = state.cues.find((entry) => entry.uniqueID === id);
+  if (!cue) throw httpError(404, "That cue isn't in the workspace any more.");
+  const text = String(body.text || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (!text) throw httpError(400, "Type a note first.");
+  const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const stamped = `[${department.name} ${time}] ${text}`;
+  const cueText = `${cue.number ? `${cue.number} ` : ""}${cue.name || cue.type || ""}`.trim();
+  logEvent("note", `${cueText}: ${stamped}`);
+
+  let savedToQlab = false;
+  let reason = "";
+  let notes = "";
+  try {
+    const current = String((await queryCueValue(id, "notes")) ?? "").trimEnd();
+    notes = current ? `${current}\n${stamped}` : stamped;
+    await writeCueNotes(id, notes);
+    savedToQlab = true;
+  } catch (error) {
+    notes = "";
+    reason = /denied/i.test(error.message)
+      ? "QLab didn't allow it: give the OSC passcode edit access in QLab's Workspace Settings → Network."
+      : error.message;
+  }
+  return { ok: true, savedToQlab, reason, notes };
+}
+
 // Details for the cue panel: how long it is, and whether this department may scrub it.
 export async function departmentCueInfo(department, cueId) {
   const id = String(cueId || "");
@@ -485,8 +518,10 @@ export async function departmentCueInfo(department, cueId) {
   const running = state.time[id];
   let duration = Number(running?.duration || 0);
   if (!duration) duration = Number(await queryCueValue(id, "duration").catch(() => 0)) || 0;
+  const notes = await queryCueValue(id, "notes").catch(() => null);
   return {
     cueId: id,
+    notes: typeof notes === "string" ? notes.trim() : "",
     duration,
     canScrub: department.permissions.includes("scrub") && duration > 0 && SCRUB_TYPES.has(cue?.type)
   };

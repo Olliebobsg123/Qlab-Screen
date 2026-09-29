@@ -3836,3 +3836,29 @@ body.focus-mode .topbar {
     grid-template-columns: 1fr;
   }
 }
+
+/* Rehearsal note box in the cue panel */
+.panel-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.panel-note textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #050505;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+#panelNotes {
+  white-space: pre-line;
+}
