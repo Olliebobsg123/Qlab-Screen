@@ -72,11 +72,12 @@ export async function runPreshowCheck() {
       for (const cue of tagged) {
         const key = deskCueFor(cue);
         numbers.set(key, [...(numbers.get(key) || []), cue]);
+        // (keys are tag labels like "LX 5" or "LXM 3")
       }
       const repeated = [...numbers.entries()].filter(([, list]) => list.length > 1);
       if (repeated.length) {
-        add("Lighting desk", "info", "Some desk cues are fired by more than one QLab cue",
-          repeated.slice(0, 5).map(([number, list]) => `desk ${number}: ${list.map(label).join(", ")}`).join("; "));
+        add("Lighting desk", "info", "Some desk commands are sent by more than one QLab cue",
+          repeated.slice(0, 5).map(([number, list]) => `${number}: ${list.map(label).join(", ")}`).join("; "));
       }
     }
   }

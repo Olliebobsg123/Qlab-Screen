@@ -333,7 +333,8 @@ function renderDesk() {
   let text = desk.online ? "Desk ✓" : "Desk offline";
   let chipState = desk.online ? "on" : "off";
   if (recent) {
-    text = !last.ok ? `LX ${last.cue} failed` : last.delivered ? `LX ${last.cue} → desk ✓` : `LX ${last.cue} sent`;
+    const tag = last.label || last.cue;
+    text = !last.ok ? `${tag} failed` : last.delivered ? `${tag} → desk ✓` : `${tag} sent`;
     chipState = !last.ok ? "off" : last.delivered ? "flash" : "pending";
     clearTimeout(renderDesk.timer);
     renderDesk.timer = setTimeout(renderDesk, DESK_FLASH_MS);
@@ -341,7 +342,7 @@ function renderDesk() {
   chip.textContent = text;
   chip.dataset.state = chipState;
   chip.title = last
-    ? `${desk.detail}\nLast: desk cue ${last.cue} ${last.ok ? (last.delivered ? "delivered" : "sent (UDP, unconfirmed)") : "FAILED"} at ${new Date(last.at).toLocaleTimeString()}`
+    ? `${desk.detail}\nLast: ${last.describe || last.cue} ${last.ok ? (last.delivered ? "delivered" : "sent (UDP, unconfirmed)") : "FAILED"} at ${new Date(last.at).toLocaleTimeString()}`
     : desk.detail;
 }
 

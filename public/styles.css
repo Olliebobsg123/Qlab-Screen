@@ -3862,3 +3862,18 @@ body.focus-mode .topbar {
 #panelNotes {
   white-space: pre-line;
 }
+
+.desk-tags {
+  margin: 0 0 14px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.desk-tags td {
+  padding: 3px 14px 3px 0;
+  color: var(--muted);
+}
+
+.desk-tags td:first-child {
+  color: var(--text);
+}

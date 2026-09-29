@@ -659,7 +659,7 @@ function renderDesk(desk) {
   element.innerHTML = recent.length
     ? recent.map((entry) => `
       <div class="desk-entry ${entry.ok ? "" : "failed"}">
-        <strong>${entry.ok ? (entry.delivered ? "✓ Delivered" : "Sent") : "✕ Failed"} · cue ${escapeText(entry.cue)}</strong>
+        <strong>${entry.ok ? (entry.delivered ? "✓ Delivered" : "Sent") : "✕ Failed"} · ${escapeText(entry.describe || `cue ${entry.cue}`)}</strong>
         <code>${escapeText(entry.address)}</code>
         <span class="quiet">${escapeText(entry.source)} · ${new Date(entry.at).toLocaleTimeString()}</span>
       </div>`).join("")
@@ -672,7 +672,7 @@ function renderDeskTagged(desk) {
   const html = tagged.length
     ? tagged.map((cue) => `
       <div class="desk-entry ${cue.instant ? "warn" : ""}">
-        <strong>Desk cue ${escapeText(cue.deskCue)}</strong>
+        <strong>${escapeText(cue.describe || cue.deskCue)}</strong> <code>${escapeText(cue.deskCue)}</code>
         <span>QLab ${escapeText(cue.number)} ${escapeText(cue.name)} <span class="quiet">(${escapeText(cue.type)})</span></span>
         ${cue.instant ? `<span class="desk-warning">A ${escapeText(cue.type)} cue ends instantly: it fires the desk when GO'd from QLab Connect, but not when GO'd in QLab itself. Use a Wait cue of 0.5 s, or tag the sound cue.</span>` : ""}
       </div>`).join("")
@@ -717,7 +717,7 @@ document.querySelector("#deskTestButton").addEventListener("click", async () => 
   const data = await response.json().catch(() => ({}));
   deskMessage.textContent = response.ok
     ? (data.entry.delivered
-      ? `Delivered ${data.entry.address} to the desk. Check it ran that cue.`
+      ? `Delivered ${data.entry.address} (${data.entry.describe}) to the desk. Check it did it.`
       : `Sent ${data.entry.address} over UDP (can't be confirmed). Check the desk ran that cue.`)
     : data.error || "Could not send.";
   loadDesk();

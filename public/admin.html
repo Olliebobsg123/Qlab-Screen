@@ -136,6 +136,13 @@
           <strong>[LX 5]</strong> anywhere in a cue's name (e.g. <em>Thunder [LX 5]</em>). When that cue starts,
           QLab Connect sends the desk a GO for its cue 5. QLab itself doesn't send anything.
         </p>
+        <table class="desk-tags">
+          <tr><td><code>LX 5</code></td><td>GO cue 5</td></tr>
+          <tr><td><code>LX 2/5</code></td><td>GO cue 5 on playback 2</td></tr>
+          <tr><td><code>LXP 2</code></td><td>GO playback 2 (its next cue)</td></tr>
+          <tr><td><code>LXR 2</code></td><td>Release playback 2</td></tr>
+          <tr><td><code>LXM 3</code></td><td>Run macro 3</td></tr>
+        </table>
         <div id="deskLink" class="desk-link" data-online="false">
           <span class="desk-link-dot"></span>
           <span id="deskLinkText">Not checked yet</span>
@@ -174,8 +181,8 @@
         </form>
         <div class="desk-test">
           <label>
-            <span>Test: desk cue</span>
-            <input id="deskTestCue" value="1" inputmode="decimal">
+            <span>Test (5, 2/5, P2, R2, M3)</span>
+            <input id="deskTestCue" value="1" autocomplete="off">
           </label>
           <button id="deskTestButton" type="button" class="secondary">Send test GO</button>
         </div>

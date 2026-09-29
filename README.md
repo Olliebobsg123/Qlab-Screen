@@ -514,7 +514,19 @@ QLab needs a paid licence to send OSC or MIDI, but QLab Connect can send it for 
 
 1. **Admin → Lighting desk**: tick *Send GOs to the lighting desk*, enter the desk's IP address, and save. The defaults are for a Zero 88 FLX / FLX S24 / FLX S48: port 8830 and the command `/zeros/cue/go/{cue}`.
 2. In QLab, name a cue **LX 5** (or put **[LX 5]** anywhere in its name, e.g. *Thunder [LX 5]*). When it starts, the desk runs its cue 5. Cue numbers like 5.5 work too. The tag can be changed from "LX".
-3. Press **Send test GO** to check the desk responds. The desk never replies, so watch the desk itself.
+3. Press **Send test GO** to check the desk responds.
+
+More tags (Zero 88 ZerOS commands, from Zero 88's OSC guide):
+
+| Tag | Desk does | OSC sent |
+|---|---|---|
+| `LX 5` | GO cue 5 | the command set in Admin, `/zeros/cue/go/5` by default |
+| `LX 2/5` | GO cue 5 on playback 2 | `/zeros/cue/go/2/5` |
+| `LXP 2` | GO playback 2 (its next cue) | `/zeros/playback/go/2` |
+| `LXR 2` | Release playback 2 | `/zeros/playback/release/2` |
+| `LXM 3` | Run macro 3 | `/zeros/macro/3` |
+
+All of them work at the start of a cue's name or number, or in [brackets] anywhere in its name. The test box takes the same short forms: `5`, `2/5`, `P2`, `R2`, `M3`. The desk never replies, so watch the desk itself.
 
 On the FLX: ZerOS 7.14 or newer, a fixed IP address on the same network as the Mac, and OSC turned on in Setup → Triggers, set to **TCP**, port 8830. If a cue doesn't fire, try the command `/zeros/cue/go/1/{cue}`.
 

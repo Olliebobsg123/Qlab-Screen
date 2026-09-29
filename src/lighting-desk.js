@@ -46,20 +46,63 @@ export function resetDeskTracking() {
   previousIds = null;
 }
 
-// The desk cue a QLab cue is tagged with, or "" if none.
-export function deskCueFor(cue, prefix = deskSettings().prefix) {
+// What a QLab cue's tag asks the desk to do, or null. With the tag "LX":
+//   LX 5 / [LX 5]      GO cue 5 on the main playback      (the OSC command set in Admin)
+//   LX 2/5 / [LX 2/5]  GO cue 5 on playback 2             /zeros/cue/go/2/5
+//   LXP 2              GO playback 2 (its next cue)        /zeros/playback/go/2
+//   LXR 2              release playback 2                  /zeros/playback/release/2
+//   LXM 3              run macro 3                         /zeros/macro/3
+// Tags go at the start of the cue's name or number, or in [brackets] anywhere in the name.
+const KINDS = { "": "cue", P: "playback", R: "release", M: "macro" };
+
+export function deskActionFor(cue, prefix = deskSettings().prefix) {
   const tag = escapeRegExp(String(prefix || "").trim());
-  if (!tag) return "";
-  const number = "(\\d+(?:\\.\\d+)?)";
-  // "LX 5", "LX5", "LX 5 Lights up" at the start of the name or number, or "[LX 5]" anywhere.
-  const start = new RegExp(`^\\s*${tag}\\s*${number}(?![\\d.])`, "i");
-  const bracket = new RegExp(`\\[\\s*${tag}\\s*${number}\\s*\\]`, "i");
+  if (!tag) return null;
+  const body = `${tag}([PRM]?)\\s*(\\d+(?:\\.\\d+)?)(?:\\s*\\/\\s*(\\d+(?:\\.\\d+)?))?`;
+  const start = new RegExp(`^\\s*${body}(?![\\d./])`, "i");
+  const bracket = new RegExp(`\\[\\s*${body}\\s*\\]`, "i");
   for (const text of [cue?.name, cue?.number, cue?.listName]) {
     const value = String(text || "");
     const match = value.match(bracket) || value.match(start);
-    if (match) return match[1];
+    if (match) return makeAction(KINDS[match[1].toUpperCase()], match[2], match[3], prefix);
   }
-  return "";
+  return null;
+}
+
+function makeAction(kind, first, second, prefix) {
+  const shown = String(prefix || "").trim().toUpperCase();
+  if (kind === "cue") {
+    // "LX 2/5": playback 2, cue 5. "LX 5": cue 5.
+    const [playback, cue] = second ? [first, second] : ["", first];
+    if (playback && !/^\d+$/.test(playback)) return null;
+    return {
+      kind, cue, playback,
+      label: `${shown} ${playback ? `${playback}/` : ""}${cue}`,
+      describe: `Cue ${cue}${playback ? ` on playback ${playback}` : ""}`
+    };
+  }
+  // Playbacks and macros are whole numbers, with no "/".
+  if (second || !/^\d+$/.test(first)) return null;
+  const words = { playback: `Playback ${first} GO`, release: `Release playback ${first}`, macro: `Macro ${first}` };
+  const letter = { playback: "P", release: "R", macro: "M" }[kind];
+  return { kind, number: first, label: `${shown}${letter} ${first}`, describe: words[kind] };
+}
+
+// Kept for callers that only need to know whether (and how) a cue is tagged.
+export function deskCueFor(cue, prefix) {
+  return deskActionFor(cue, prefix)?.label || "";
+}
+
+function deskAddress(action) {
+  const desk = deskSettings();
+  if (action.kind === "cue") {
+    return action.playback
+      ? `/zeros/cue/go/${action.playback}/${action.cue}`
+      : desk.command.replaceAll("{cue}", action.cue);
+  }
+  if (action.kind === "playback") return `/zeros/playback/go/${action.number}`;
+  if (action.kind === "release") return `/zeros/playback/release/${action.number}`;
+  return `/zeros/macro/${action.number}`;
 }
 
 // Called with every reading of QLab's running cues.
@@ -71,10 +114,10 @@ export function checkRunningForDesk(running) {
   for (const cue of running) {
     if (!cue.uniqueID || previous.has(cue.uniqueID)) continue;
     if (Date.now() - (startedByUs.get(cue.uniqueID) || 0) < STARTED_BY_US_MS) continue;
-    const deskCue = deskCueFor(cue);
-    if (deskCue) {
+    const action = deskActionFor(cue);
+    if (action) {
       const label = `${cue.number ? `${cue.number} ` : ""}${cue.name || ""}`.trim();
-      sendDeskGo(deskCue, `QLab ${label}`).catch(() => {});
+      sendDeskAction(action, `QLab ${label}`).catch(() => {});
     }
   }
 }
@@ -98,10 +141,10 @@ export async function withDeskStart(cueIds, source, run) {
   }
   for (const id of ids) {
     const cue = state.cues.find((entry) => entry.uniqueID === id);
-    const deskCue = deskCueFor(cue);
-    if (!deskCue) continue;
+    const action = deskActionFor(cue);
+    if (!action) continue;
     const label = `${cue.number ? `${cue.number} ` : ""}${cue.name || ""}`.trim();
-    sendDeskGo(deskCue, `${source}: ${label}`).catch(() => {});
+    sendDeskAction(action, `${source}: ${label}`).catch(() => {});
   }
   return result;
 }
@@ -110,20 +153,30 @@ export async function withDeskStart(cueIds, source, run) {
 function taggedCues() {
   return state.cues
     .filter((cue) => cue.depth > 0)
-    .map((cue) => ({ number: cue.number || "", name: cue.name || "", type: cue.type || "", deskCue: deskCueFor(cue) }))
-    .filter((cue) => cue.deskCue)
+    .map((cue) => ({ number: cue.number || "", name: cue.name || "", type: cue.type || "", action: deskActionFor(cue) }))
+    .filter((cue) => cue.action)
+    .map(({ action, ...cue }) => ({ ...cue, deskCue: action.label, describe: action.describe }))
     .map((cue) => ({ ...cue, instant: INSTANT_TYPES.has(cue.type) }))
     .slice(0, 300);
 }
 
-export async function sendDeskGo(deskCue, source = "") {
+// The test button: "5", "2/5", "M3", "P2", "R2", or a full tag like "LXM 3".
+export async function sendDeskGo(input, source = "") {
+  const prefix = deskSettings().prefix;
+  const text = String(input || "").trim();
+  const tagText = new RegExp(`^${escapeRegExp(prefix)}`, "i").test(text) ? text : `${prefix}${/^\d/.test(text) ? " " : ""}${text}`;
+  const action = deskActionFor({ name: tagText }, prefix);
+  if (!action) throw Object.assign(new Error("Try a desk cue number like 5 or 5.5, 2/5 (cue 5 on playback 2), P2, R2 or M3."), { status: 400 });
+  return sendDeskAction(action, source);
+}
+
+export async function sendDeskAction(action, source = "") {
   const desk = deskSettings();
   if (!desk.host) throw Object.assign(new Error("Set the lighting desk's IP address first."), { status: 400 });
-  const cue = String(deskCue).trim();
-  if (!/^\d+(\.\d+)?$/.test(cue)) throw Object.assign(new Error("Desk cue numbers look like 5 or 5.5."), { status: 400 });
-  const address = desk.command.replaceAll("{cue}", cue);
+  const address = deskAddress(action);
+  const cue = action.label;
   // delivered: written into a live connection to the desk (TCP). UDP is sent but unconfirmed.
-  const entry = { at: new Date().toISOString(), cue, address, source, ok: true, delivered: false, error: "" };
+  const entry = { at: new Date().toISOString(), cue, label: action.label, describe: action.describe, address, source, ok: true, delivered: false, error: "" };
   try {
     if (desk.transport === "tcp") {
       await sendTcp(encodeOsc(address, []));
@@ -137,7 +190,7 @@ export async function sendDeskGo(deskCue, source = "") {
   }
   recent.unshift(entry);
   recent.length = Math.min(recent.length, MAX_RECENT);
-  logEvent("lighting-desk", `${entry.ok ? (entry.delivered ? "GO delivered" : "GO sent") : "FAILED"} desk cue ${cue} (${address})${source ? ` from ${source}` : ""}${entry.ok ? "" : `: ${entry.error}`}`);
+  logEvent("lighting-desk", `${entry.ok ? (entry.delivered ? "Delivered" : "Sent") : "FAILED"} ${action.describe} (${address})${source ? ` from ${source}` : ""}${entry.ok ? "" : `: ${entry.error}`}`);
   broadcastPatch();
   if (!entry.ok) throw Object.assign(new Error(`Could not reach the desk: ${entry.error}`), { status: 502 });
   return entry;
@@ -157,7 +210,7 @@ registerMetaProvider(() => {
       transport: desk.transport,
       online: link.online,
       detail: link.detail,
-      last: last ? { cue: last.cue, ok: last.ok, delivered: last.delivered, at: last.at, source: last.source } : null
+      last: last ? { cue: last.cue, label: last.label, describe: last.describe, ok: last.ok, delivered: last.delivered, at: last.at, source: last.source } : null
     }
   };
 });
