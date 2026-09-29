@@ -2,7 +2,7 @@ import { deptFetch, escapeHtml } from "/shared.js";
 
 const $ = (selector) => document.querySelector(selector);
 const ICONS = { ok: "✓", warn: "!", fail: "✕", info: "i" };
-const ACTION_LABELS = { clearStandbys: "Clear standbys", clearPage: "Clear call" };
+const ACTION_LABELS = { clearStandbys: "Clear standbys", clearPage: "Clear call", resetStarts: "Back to first cues" };
 let checking = false;
 
 runCheck();

@@ -1,5 +1,5 @@
 import { clearCueLights, publicCueLights } from "./cuelights.js";
-import { departmentCueIds } from "./departments.js";
+import { departmentCueIds, departmentStarts, resetDepartmentStarts } from "./departments.js";
 import { deskCueFor, deskStatus, INSTANT_TYPES } from "./lighting-desk.js";
 import { clearPage, publicPage } from "./paging.js";
 import { presence } from "./presence.js";
@@ -36,14 +36,17 @@ export async function runPreshowCheck() {
   if (state.connected) {
     const running = state.running.filter((cue) => cue.type !== "Cue List");
     if (running.length) add("QLab", "warn", `${running.length} cue${running.length === 1 ? " is" : "s are"} still playing`, running.slice(0, 5).map(label).join(", "));
-    // The shown list's playhead, else any list that has one.
-    const standbyIds = [state.standbyId, ...Object.values(state.playheads || {})].filter(Boolean);
-    const standby = standbyIds.map((id) => state.cues.find((cue) => cue.uniqueID === id)).find(Boolean);
-    const list = standby && state.cues.find((cue) => cue.uniqueID === rootOf(standby));
-    const first = list && state.cues.find((cue) => cue.parentId === list.uniqueID);
-    if (!standby) add("QLab", "warn", "QLab's playhead is empty", "Click the first cue in QLab so it's standing by (QLab clears the playhead after the last cue).");
-    else if (first && first.uniqueID !== standby.uniqueID) add("QLab", "warn", `Standing by on ${label(standby)}, not the first cue`, `The first cue is ${label(first)}.`);
-    else add("QLab", "ok", `Standing by on ${label(standby)}`);
+    // Every department's GO should start the show on its first cue.
+    const starts = departmentStarts();
+    const cueById = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
+    const moved = starts.filter((entry) => entry.next !== entry.first);
+    const where = (entry, id) => `${entry.department.name}: ${id && cueById.get(id) ? label(cueById.get(id)) : "finished"}`;
+    if (moved.length) {
+      add("QLab", "warn", `${names(moved.map((entry) => entry.department.name))} ${moved.length === 1 ? "isn't" : "aren't"} on ${moved.length === 1 ? "its" : "their"} first cue`,
+        `${moved.map((entry) => `${where(entry, entry.next)} (first is ${label(cueById.get(entry.first))})`).join(" · ")}`, "", "resetStarts");
+    } else if (starts.length) {
+      add("QLab", "ok", "Every department starts on its first cue", starts.map((entry) => where(entry, entry.first)).join(" · "));
+    }
 
     const disarmed = cues.filter((cue) => cue.armed === 0);
     if (disarmed.length) add("QLab", "warn", `${disarmed.length} disarmed cue${disarmed.length === 1 ? "" : "s"}`, `These won't play: ${disarmed.slice(0, 8).map(label).join(", ")}${disarmed.length > 8 ? "…" : ""}`, "Re-arm them in QLab if that's left over from rehearsal.");
@@ -104,7 +107,7 @@ export async function runPreshowCheck() {
 
   // --- Leftovers from rehearsal ---
   const lights = Object.keys(publicCueLights());
-  if (lights.length) add("Leftovers", "warn", `${lights.length} standby${lights.length === 1 ? " is" : "s are"} still showing`, "Clear them so departments start the show with no standby showing.", "clearStandbys");
+  if (lights.length) add("Leftovers", "warn", `${lights.length} standby${lights.length === 1 ? " is" : "s are"} still showing`, "Clear them so departments start the show with no standby showing.", "", "clearStandbys");
   if (publicPage()) add("Leftovers", "warn", "A backstage call is still showing", `“${publicPage().text}”`, "", "clearPage");
   if (settings.testingMode) add("Leftovers", "warn", "Testing mode is on", "Logins only last until each tab closes.", "Admin → Server → turn off Testing mode.");
   const show = publicShowState();
@@ -125,6 +128,7 @@ export async function runPreshowCheck() {
 export function runPreshowFix(fix) {
   if (fix === "clearStandbys") return { cleared: clearCueLights() };
   if (fix === "clearPage") return clearPage();
+  if (fix === "resetStarts") return resetDepartmentStarts();
   const error = new Error("Unknown fix.");
   error.status = 400;
   throw error;
@@ -162,13 +166,6 @@ async function mapLimited(list, limit, run) {
     }
   }));
   return results;
-}
-
-function rootOf(cue) {
-  let current = cue;
-  const map = new Map(state.cues.map((entry) => [entry.uniqueID, entry]));
-  while (current?.parentId && map.get(current.parentId)) current = map.get(current.parentId);
-  return current?.uniqueID;
 }
 
 function label(cue) {

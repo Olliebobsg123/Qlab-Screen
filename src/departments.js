@@ -316,6 +316,24 @@ function setCursor(department, cueId) {
   cursors.set(department.id, { cueId, playheadIndex: order.get(state.standbyId) ?? -1 });
 }
 
+// For the pre-show check: where each department's GO starts, against its first cue.
+export function departmentStarts() {
+  return getDepartments()
+    .filter((department) => department.role !== "stageManager" && departmentMode(department) === "sequence")
+    .map((department) => {
+      const sequence = departmentSequence(department);
+      return { department, first: sequence[0]?.uniqueID || "", next: sequenceNext(department, sequence) };
+    })
+    .filter((entry) => entry.first);
+}
+
+// Put every department's GO back on its first cue (top of the show).
+export function resetDepartmentStarts() {
+  const moved = departmentStarts().filter((entry) => entry.next !== entry.first);
+  for (const entry of moved) setCursor(entry.department, entry.first);
+  return { reset: moved.length };
+}
+
 function departmentNextIds() {
   const result = {};
   for (const department of getDepartments()) {
