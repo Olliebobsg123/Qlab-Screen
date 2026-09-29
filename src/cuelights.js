@@ -40,3 +40,12 @@ export function setCueLight(departmentId, lightState, { cue = "", cueId = "", by
 export function getCueLight(departmentId) {
   return lights.get(departmentId) || null;
 }
+
+// Clear every light (pre-show reset).
+export function clearCueLights() {
+  for (const timer of goTimers.values()) clearTimeout(timer);
+  goTimers.clear();
+  const count = lights.size;
+  lights.clear();
+  return count;
+}

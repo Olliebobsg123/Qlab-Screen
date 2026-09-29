@@ -30,7 +30,7 @@ const startedByUs = new Map();
 const STARTED_BY_US_MS = 3000;
 // Cue types that finish the moment they start, so they're never seen running. They only reach the
 // desk when they're started from QLab Connect.
-const INSTANT_TYPES = new Set(["Memo", "Start", "Stop", "Pause", "Load", "Reset", "Devamp", "GoTo", "Goto",
+export const INSTANT_TYPES = new Set(["Memo", "Start", "Stop", "Pause", "Load", "Reset", "Devamp", "GoTo", "Goto",
   "Target", "Arm", "Disarm", "Script", "Network", "MIDI", "Text"]);
 
 export function deskSettings() {

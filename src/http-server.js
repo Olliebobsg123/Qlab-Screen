@@ -7,6 +7,8 @@ import { hasControlAuth, listControlActions, runControlAction } from "./control.
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { deskStatus, restartDeskLink, sendDeskGo } from "./lighting-desk.js";
+import { checkIn } from "./presence.js";
+import { runPreshowCheck, runPreshowFix } from "./preshow.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
 import {
   adminDepartmentList,
@@ -139,6 +141,20 @@ async function routeRequest(request, response) {
     return sendJson(response, { ok: true });
   }
 
+  // Pre-show check: for the admin, or a department that runs the show (stage manager powers).
+  if (url.pathname === "/api/preshow" || url.pathname === "/api/preshow/fix") {
+    const department = requestDepartment(request, url);
+    const allowed = hasAdminAuth(request) ||
+      (department && (department.role === "stageManager" || department.permissions.includes("showGo")));
+    if (!allowed) return department ? sendJson(response, { error: "Only the stage manager or admin can run the pre-show check." }, 403) : requestAdminAuth(response);
+    if (request.method === "GET") return sendJson(response, await runPreshowCheck());
+    if (request.method === "POST") {
+      const result = runPreshowFix(String((await readBody(request)).fix || ""));
+      broadcastPatch();
+      return sendJson(response, { ok: true, result });
+    }
+  }
+
   if (url.pathname.startsWith("/api/dept/")) {
     // "Open as admin" (?dept=...) asks for the admin login rather than sending you to the department login.
     if (url.searchParams.get("dept") && !hasAdminAuth(request)) return requestAdminAuth(response);
@@ -149,6 +165,11 @@ async function routeRequest(request, response) {
     }
     if (url.pathname === "/api/dept/cue" && request.method === "GET") {
       return sendJson(response, await departmentCueInfo(department, url.searchParams.get("cueId")));
+    }
+    if (url.pathname === "/api/dept/presence" && request.method === "POST") {
+      // The admin looking at a department's page doesn't make that department "online".
+      if (!url.searchParams.get("dept")) checkIn(department.id, await readBody(request));
+      return sendJson(response, { ok: true });
     }
     if (url.pathname === "/api/dept/action" && request.method === "POST") {
       const result = await runDepartmentAction(department, await readBody(request));

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pre-show Check</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell check-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">Before the house opens</span>
+          <h1>Pre-show check</h1>
+        </div>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
+      </header>
+
+      <section id="verdict" class="check-verdict" data-verdict="loading">
+        <strong id="verdictTitle">Checking…</strong>
+        <span id="verdictDetail">This takes a few seconds: it asks QLab about every cue.</span>
+        <button id="recheckButton" type="button" class="secondary">Check again</button>
+      </section>
+
+      <div id="checkGroups" class="check-groups"></div>
+      <p id="checkMessage" class="form-message" aria-live="polite"></p>
+    </main>
+    <script src="/nav.js" defer></script>
+    <script src="/check.js" type="module"></script>
+  </body>
+</html>

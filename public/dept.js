@@ -67,6 +67,7 @@ startLiveTimers(() => state);
 setupButtons();
 setupCuePanel();
 setupStandbys();
+setupPresence();
 setupKeyboard();
 
 // Fetch which cues this department owns. The list changes whenever cues are added, deleted or
@@ -344,6 +345,34 @@ function renderDesk() {
     : desk.detail;
 }
 
+// --- Who's online: tell the server this department's page is open ---
+
+function setupPresence() {
+  // A new ID for every page load, so a closed page's last messages can't be mistaken for this one.
+  const clientId = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+  const report = (extra = {}) => deptFetch(withQuery("/api/dept/presence"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientId, visible: document.visibilityState === "visible", ...extra }),
+    keepalive: true
+  }).catch(() => {});
+  report();
+  setInterval(report, 10000);
+  document.addEventListener("visibilitychange", () => report());
+  window.addEventListener("pagehide", () => report({ leaving: true }));
+}
+
+// "Online", "In background" or "Last seen 5 min ago" for a department.
+function presenceLabel(departmentId) {
+  const entry = state.presence?.[departmentId];
+  if (!entry) return { state: "never", text: "Not opened yet" };
+  if (entry.online) return entry.hidden
+    ? { state: "hidden", text: "Open (screen off / in background)" }
+    : { state: "online", text: entry.screens > 1 ? `Online · ${entry.screens} screens` : "Online" };
+  const minutes = Math.round((Date.now() - Date.parse(entry.lastSeenAt)) / 60000);
+  return { state: "offline", text: minutes < 1 ? "Just left" : `Last seen ${minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`} ago` };
+}
+
 // --- Standbys (cue lights) for departments with the backstage-calls power ---
 // Pick one of a department's cues and send it a standby; it answers "standing by"; then GO.
 
@@ -381,6 +410,7 @@ function renderStandbys() {
   setHtml($("#lightRows"), targets.length
     ? targets.map((department) => {
       const light = state.cueLights?.[department.id];
+      const presence = presenceLabel(department.id);
       const cueIds = (targetCues.get(department.id) || []).filter((cueId) => cueMap.has(cueId));
       const chosen = standbyChoice.has(department.id) ? standbyChoice.get(department.id) : targetNextCue(department.id, cueIds);
       const id = escapeHtml(department.id);
@@ -390,7 +420,8 @@ function renderStandbys() {
       })].join("");
       return `
         <div class="light-row" data-state="${escapeHtml(light?.state || "off")}">
-          <span class="light-name"><span class="dept-dot" style="--dept:${COLORS[department.color] || COLORS.blue}"></span>${escapeHtml(department.name)}${department.followStandby ? ' <span class="badge">follows</span>' : ""}</span>
+          <span class="light-name"><span class="dept-dot" style="--dept:${COLORS[department.color] || COLORS.blue}"></span>${escapeHtml(department.name)}${department.followStandby ? ' <span class="badge">follows</span>' : ""}
+            <span class="presence" data-presence="${presence.state}" title="${escapeHtml(presence.text)}">${escapeHtml(presence.text)}</span></span>
           <span class="light-status">${escapeHtml(labels[light?.state] || "Off")}${light?.cue ? ` · ${escapeHtml(light.cue)}` : ""}</span>
           <span class="light-controls">
             <select data-light-cue="${id}" aria-label="Cue for ${escapeHtml(department.name)}">${options}</select>

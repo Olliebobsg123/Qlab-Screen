@@ -531,6 +531,21 @@ Every department page shows a **Desk** chip while the link is on: "Desk ✓" whe
 
 While the link is on, QLab Connect checks QLab about 12 times a second, so the desk GO lands within about a tenth of a second of QLab's. Cues already playing when QLab Connect connects aren't sent.
 
+## Pre-show check
+
+Open **Check** in the menu (as the Stage Manager, or with the admin login) at the half. It gives one verdict (ready, nearly ready, or not ready) and a list of what to fix:
+
+- **QLab:** connected, the passcode can control QLab, cue control is on, the playhead is on the first cue, nothing is still playing, no **disarmed** cues left from rehearsal, no **broken** cues (missing files, unpatched outputs).
+- **Lighting desk:** the desk is connected, cues are tagged, and no tagged cue ends instantly without a pre/post-wait. It also shows desk cues fired by more than one QLab cue.
+- **Departments:** each one has a password, has cues, and is **logged in right now**.
+- **Leftovers:** standbys or a backstage call still showing (with buttons to clear them), testing mode on, the show clock already running, and the default admin password.
+
+It checks again every 20 seconds while it's open.
+
+## Who's online
+
+Each department page checks in every 10 seconds. The Stage Manager's **Standbys** tab shows each department's status next to its name: **Online**, **Open (screen off / in background)**, or **Last seen 5 min ago**. That way you know before you send a standby whether anyone is there to see it. The pre-show check uses the same information. "Open as admin" views don't count.
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

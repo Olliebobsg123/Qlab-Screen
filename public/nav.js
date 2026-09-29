@@ -1,7 +1,7 @@
 // One menu for every page, so they all match. Pages include <nav class="topnav" data-nav></nav>.
 (() => {
   const groups = [
-    { label: "Start", items: [{ href: "/start.html", text: "Start" }] },
+    { label: "Start", items: [{ href: "/start.html", text: "Start" }, { href: "/check.html", text: "Check" }] },
     {
       label: "Watch",
       items: [
