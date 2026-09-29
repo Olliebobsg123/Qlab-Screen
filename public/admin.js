@@ -612,3 +612,72 @@ checkButton.addEventListener("click", async () => {
     checkButton.textContent = "Check QLab";
   }
 });
+
+
+// --- Lighting desk (QLab cues tagged "LX 5" send the desk an OSC GO) ---
+
+const deskForm = document.querySelector("#deskForm");
+const deskMessage = document.querySelector("#deskMessage");
+
+loadDesk();
+
+async function loadDesk() {
+  const desk = await fetch("/api/admin/lighting-desk", { cache: "no-store" }).then((response) => response.json()).catch(() => null);
+  if (!desk) return;
+  deskForm.elements.enabled.checked = desk.enabled;
+  deskForm.elements.host.value = desk.host;
+  deskForm.elements.port.value = desk.port;
+  deskForm.elements.prefix.value = desk.prefix;
+  deskForm.elements.command.value = desk.command;
+  renderDesk(desk);
+}
+
+function renderDesk(desk) {
+  document.querySelector("#deskState").textContent = desk.enabled && desk.host ? `On · ${desk.host}:${desk.port}` : "Off";
+  const recent = desk.recent || [];
+  const element = document.querySelector("#deskRecent");
+  element.innerHTML = recent.length
+    ? recent.map((entry) => `
+      <div class="desk-entry ${entry.ok ? "" : "failed"}">
+        <strong>${entry.ok ? "GO" : "Failed"} ${escapeText(entry.cue)}</strong>
+        <code>${escapeText(entry.address)}</code>
+        <span class="quiet">${escapeText(entry.source)} · ${new Date(entry.at).toLocaleTimeString()}</span>
+      </div>`).join("")
+    : "Nothing sent yet.";
+}
+
+deskForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const response = await fetch("/api/admin/lighting-desk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      enabled: deskForm.elements.enabled.checked,
+      host: deskForm.elements.host.value,
+      port: Number(deskForm.elements.port.value),
+      prefix: deskForm.elements.prefix.value,
+      command: deskForm.elements.command.value
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  deskMessage.textContent = response.ok ? "Saved." : data.error || "Could not save.";
+  if (response.ok) {
+    deskForm.elements.command.value = data.command;
+    deskForm.elements.prefix.value = data.prefix;
+    deskForm.elements.port.value = data.port;
+    renderDesk(data);
+  }
+});
+
+document.querySelector("#deskTestButton").addEventListener("click", async () => {
+  const response = await fetch("/api/admin/lighting-desk/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cue: document.querySelector("#deskTestCue").value })
+  });
+  const data = await response.json().catch(() => ({}));
+  deskMessage.textContent = response.ok
+    ? `Sent ${data.entry.address}. The desk doesn't reply, so check it ran the cue.`
+    : data.error || "Could not send.";
+  loadDesk();
+});

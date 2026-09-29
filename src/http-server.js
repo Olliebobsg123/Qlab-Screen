@@ -6,6 +6,7 @@ import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, HTTPS_PORT, QLAB_TCP_PORT, ROOT_
 import { hasControlAuth, listControlActions, runControlAction } from "./control.js";
 import { broadcastHeartbeat, broadcastMeters, broadcastPatch, handleEvents } from "./events.js";
 import { sendJson, readBody, serveStatic } from "./http-utils.js";
+import { deskStatus, sendDeskGo } from "./lighting-desk.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
 import {
   adminDepartmentList,
@@ -168,6 +169,32 @@ async function routeRequest(request, response) {
       runningAsService: process.env.QLAB_CONNECT_SERVICE === "1",
       testingMode: getSettings().testingMode
     });
+  }
+
+  if (url.pathname === "/api/admin/lighting-desk" && request.method === "GET") {
+    return sendJson(response, deskStatus());
+  }
+
+  if (url.pathname === "/api/admin/lighting-desk" && request.method === "POST") {
+    const body = await readBody(request);
+    const current = getSettings().lightingDesk;
+    await updateSettings({
+      ...getSettings(),
+      lightingDesk: {
+        enabled: body.enabled ?? current.enabled,
+        host: body.host ?? current.host,
+        port: body.port ?? current.port,
+        prefix: body.prefix ?? current.prefix,
+        command: body.command ?? current.command
+      }
+    });
+    return sendJson(response, { ok: true, ...deskStatus() });
+  }
+
+  if (url.pathname === "/api/admin/lighting-desk/test" && request.method === "POST") {
+    const body = await readBody(request);
+    const entry = await sendDeskGo(body.cue, "test button");
+    return sendJson(response, { ok: true, entry });
   }
 
   if (url.pathname === "/api/admin/testing-mode" && request.method === "POST") {

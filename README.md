@@ -445,6 +445,7 @@ src/network.js            LAN addresses and QR codes
 src/tls.js                Self-signed HTTPS certificate for Web MIDI / audio input
 src/midi-out.js           MIDI pass-through: WebSocket from the MIDI page to a MIDI output port
 src/departments.js        Department logins, cue ownership and department actions
+src/lighting-desk.js      Lighting desk link (QLab cues tagged LX 5 → desk OSC GO)
 src/cuelights.js          Standbys (standby / standing by / GO per department)
 src/qlab-check.js         "Check QLab" in Admin
 scripts/mac-service.sh    Run as a macOS background service (npm run mac:install)
@@ -506,6 +507,18 @@ A Monitor or TV filtered to a department (`?dept=<id>`) shows that department's 
 ### Follow standbys
 
 Tick **Follow standbys** on a department in Admin → Departments. When the stage manager calls a standby for one of its cues, that cue becomes the department's next cue, so its big GO fires it. The GO card turns amber and says who called the standby. Nothing pops up over the GO button: tap **Options** on the card for the cue's start-from bar, pause and stop. Departments with this on show "follows" in the Standbys tab.
+
+## Lighting desk (free with any QLab licence)
+
+QLab needs a paid licence to send OSC or MIDI, but QLab Connect can send it for you. Tag QLab cues with a desk cue number and QLab Connect sends the lighting desk a GO when that cue starts.
+
+1. **Admin → Lighting desk**: tick *Send GOs to the lighting desk*, enter the desk's IP address, and save. The defaults are for a Zero 88 FLX / FLX S24 / FLX S48: port 8830 and the command `/zeros/cue/go/{cue}`.
+2. In QLab, name a cue **LX 5** (or put **[LX 5]** anywhere in its name, e.g. *Thunder [LX 5]*). When it starts, the desk runs its cue 5. Cue numbers like 5.5 work too. The tag can be changed from "LX".
+3. Press **Send test GO** to check the desk responds. The desk never replies, so watch the desk itself.
+
+On the FLX: ZerOS 7.14 or newer, a fixed IP address on the same network as the Mac, and OSC turned on in Setup → Triggers (UDP, port 8830). If a cue doesn't fire, try the command `/zeros/cue/go/1/{cue}`.
+
+Memo cues finish instantly and can be missed. Tag a cue that lasts a moment instead: the sound cue itself, a Group, or a Wait cue of half a second or more. While the link is on, QLab Connect checks QLab about 12 times a second, so the desk GO lands within about a tenth of a second of QLab's. Cues already playing when QLab Connect connects aren't sent. Every GO sent is in the show report.
 
 ## Testing mode
 

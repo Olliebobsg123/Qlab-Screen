@@ -3,6 +3,7 @@ import { QLAB_TCP_PORT } from "./config.js";
 import { asArray, flattenCues } from "./cues.js";
 import { broadcastChanges, broadcastPatch, broadcastSnapshot } from "./events.js";
 import { decodeOsc, decodeSlip, encodeOsc, encodeSlip, parseData } from "./osc.js";
+import { checkRunningForDesk, deskActive, resetDeskTracking } from "./lighting-desk.js";
 import { resetRunningTracking, recordRunningCues } from "./show.js";
 import { markCuesIfChanged, setDisconnected, state } from "./state.js";
 
@@ -10,6 +11,10 @@ const pending = new Map();
 // Three independent loops, so one slow or unanswered question can't hold up the others:
 // what's running (and cue list changes), running cue timing, and cue list playheads.
 const POLL_MS = 500;
+// With the lighting desk link on, check what's running much more often, so a tagged cue's
+// desk GO follows QLab's GO closely.
+const DESK_POLL_MS = 80;
+let lastPollAt = 0;
 const TIMING_MS = 250;
 // New, renamed or deleted cues show up within about half a second, even if QLab doesn't announce them.
 const CUE_LIST_MS = 500;
@@ -96,11 +101,14 @@ export async function connectToQlab(connection) {
   activeListId = "";
   playheadField = "";
   resetRunningTracking();
+  resetDeskTracking();
   await send(host, `/workspace/${state.workspaceId}/updates`, [1]);
   await refreshAll();
   await refreshAllPlayheads();
   // Twice a second; screens count smoothly in between using the timestamps on each reading.
-  pollTimer = setInterval(refreshAll, POLL_MS);
+  pollTimer = setInterval(() => {
+    if (deskActive() || Date.now() - lastPollAt >= POLL_MS - DESK_POLL_MS / 2) refreshAll();
+  }, DESK_POLL_MS);
   cueListTimer = setInterval(refreshCueLists, CUE_LIST_MS);
   timingTimer = setInterval(refreshTiming, TIMING_MS);
   playheadTimer = setInterval(refreshActivePlayhead, PLAYHEAD_MS);
@@ -140,6 +148,7 @@ export async function refreshAll(forceCues = false) {
     return;
   }
   state.polling = true;
+  lastPollAt = Date.now();
   try {
     const shouldLoadCues = forceCues || state.cues.length === 0;
     const [cueReply, runningReply] = await Promise.all([
@@ -152,6 +161,7 @@ export async function refreshAll(forceCues = false) {
     }
 
     state.running = flattenCues(asArray(runningReply.data));
+    checkRunningForDesk(state.running);
     const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
     recordRunningCues(state.running, cueMap);
     // Drop timing for cues that stopped, and get a reading for new ones straight away.

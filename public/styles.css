@@ -3598,3 +3598,48 @@ body.focus-mode .topbar {
     font-size: 0.95rem;
   }
 }
+
+/* --- Admin: lighting desk --- */
+
+.desk-test {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.desk-test label {
+  display: grid;
+  gap: 6px;
+  width: 140px;
+}
+
+.desk-recent {
+  display: grid;
+  gap: 6px;
+}
+
+.desk-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--running);
+  border-radius: 8px;
+  color: var(--text);
+}
+
+.desk-entry.failed {
+  border-left-color: var(--danger);
+}
+
+#tab-desk .dept-more {
+  margin-top: 16px;
+}
+
+#tab-desk .form-message {
+  margin-top: 8px;
+}

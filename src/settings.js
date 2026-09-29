@@ -130,6 +130,7 @@ function normalizeSettings(saved) {
     // Testing mode: each browser tab logs in to a department separately (for trying several
     // departments on one computer). Normally a login is shared by the whole browser.
     testingMode: Boolean(saved.testingMode),
+    lightingDesk: normalizeLightingDesk(saved.lightingDesk),
     departments: Array.isArray(saved.departments) ? saved.departments.map(normalizeDepartment).filter(Boolean).slice(0, 24) : [],
     // Signs department login cookies; kept so a server restart doesn't log everyone out.
     sessionSecret: String(saved.sessionSecret || "") || randomBytes(32).toString("hex"),
@@ -168,6 +169,21 @@ function normalizeDepartment(saved) {
     pageTargets: list(saved.pageTargets).slice(0, 40).map((target) => target.slice(0, 40)),
     passwordHash: String(saved.passwordHash || ""),
     passwordSalt: String(saved.passwordSalt || "")
+  };
+}
+
+// Lighting desk link (src/lighting-desk.js): QLab cues tagged "LX 5" send the desk an OSC GO.
+function normalizeLightingDesk(saved) {
+  const desk = saved && typeof saved === "object" ? saved : {};
+  const port = Number(desk.port);
+  const command = String(desk.command || "").trim();
+  return {
+    enabled: Boolean(desk.enabled),
+    host: String(desk.host || "").trim().slice(0, 100),
+    port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 8830,
+    prefix: String(desk.prefix ?? "LX").trim().slice(0, 12) || "LX",
+    // Zero 88 ZerOS: GO a cue on the master playback. {cue} is the desk cue number.
+    command: command.startsWith("/") && command.includes("{cue}") ? command.slice(0, 120) : "/zeros/cue/go/{cue}"
   };
 }
 
