@@ -9,6 +9,7 @@ import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { deskStatus, restartDeskLink, sendDeskGo } from "./lighting-desk.js";
 import { outputLevels } from "./desk-output.js";
 import { checkIn } from "./presence.js";
+import { deletePerformance, listPerformances, updatePerformance } from "./performances.js";
 import { runPreshowCheck, runPreshowFix } from "./preshow.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
 import {
@@ -334,6 +335,19 @@ async function routeRequest(request, response) {
   if (url.pathname === "/api/admin/qr.svg" && request.method === "GET") {
     response.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" });
     return response.end(await qrSvg(url.searchParams.get("text") || ""));
+  }
+
+  if (url.pathname === "/api/admin/performances" && request.method === "GET") {
+    return sendJson(response, { performances: listPerformances() });
+  }
+
+  const performanceMatch = url.pathname.match(/^\/api\/admin\/performances\/([\w-]+)$/);
+  if (performanceMatch && request.method === "POST") {
+    return sendJson(response, { ok: true, performance: await updatePerformance(performanceMatch[1], await readBody(request)) });
+  }
+  if (performanceMatch && request.method === "DELETE") {
+    await deletePerformance(performanceMatch[1]);
+    return sendJson(response, { ok: true });
   }
 
   if (url.pathname === "/api/admin/report" && request.method === "GET") {

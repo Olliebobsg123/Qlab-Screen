@@ -24,7 +24,36 @@
         <div><span class="label">Stage time</span><strong id="reportStageTime">-</strong></div>
       </section>
 
+      <section class="panel admin-panel perf-panel">
+        <div class="panel-head bare">
+          <h2>Performances</h2>
+          <span>Saved each time the show is ended (End show on the Stage Manager's Clock tab)</span>
+        </div>
+        <p id="perfHeadline" class="perf-headline" hidden></p>
+        <div class="report-table-wrap">
+          <table class="report-table perf-table">
+            <thead id="perfHead"></thead>
+            <tbody id="perfRows"></tbody>
+          </table>
+        </div>
+        <div id="perfDrift" hidden>
+          <h3 class="subhead">Where the time went in the latest show</h3>
+          <p class="help-text quiet">Stretches between cues that took longest compared with the average of the other shows.</p>
+          <ol id="perfDriftList" class="perf-drift"></ol>
+        </div>
+        <details id="perfCuesBox" class="dept-more" hidden>
+          <summary>Cue timings, night by night (running time, intervals left out)</summary>
+          <div class="report-table-wrap">
+            <table class="report-table perf-table">
+              <thead id="perfCuesHead"></thead>
+              <tbody id="perfCuesRows"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
       <section class="panel admin-panel">
+        <h2 class="subhead">This show's GO log</h2>
         <div class="form-actions">
           <a class="tool-button" href="/api/admin/report.csv">Download CSV</a>
           <button id="refreshButton" type="button" class="secondary">Refresh</button>

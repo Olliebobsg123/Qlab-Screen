@@ -578,6 +578,19 @@ In tech, anyone can tap one of their cues (or **Options** on the GO card), type 
 
 Writing into QLab needs the OSC passcode to have **edit** access (QLab → Workspace Settings → Network). Without it the note is still saved in the report, and the page says why it didn't reach QLab.
 
+## Show timing report (night by night)
+
+Every time the Stage Manager presses **End show** (Clock tab), the performance is saved: each act's length, each interval, and when every cue was reached in running time (intervals left out, so a long interval doesn't make all of Act 2 look late). Starting a new show without ending the last one, or resetting the report, keeps it too, marked "not ended". Shows shorter than 5 minutes aren't kept.
+
+The **Report** page then shows:
+
+- **Performances**: one row per show with Act 1, Interval, Act 2, running time and total, each compared with the average of the other shows (red = longer by a minute or more, green = shorter). Give each a name, e.g. "Opening night", or delete a rehearsal.
+- A headline for the latest show, e.g. "ran 3:45 long, Act 1 +2:55, Act 2 +0:50".
+- **Where the time went**: the stretches between two cues that took longest compared with other nights, e.g. "+2:55 between 5 Scene 1 and 12 Storm".
+- **Cue timings**: when each cue was reached, night by night.
+
+Up to 80 performances are kept, in `performances.json` next to the settings file.
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SETTINGS_DIR } from "./config.js";
+import { archivePerformance } from "./performances.js";
 
 // Show clock, interval timer, and the GO log used for show reports.
 const SHOW_PATH = process.env.QLAB_SHOW_PATH || join(SETTINGS_DIR, "show-log.json");
@@ -73,6 +74,8 @@ export function logEvent(kind, detail = "") {
 }
 
 export function startShow() {
+  // Starting again without ending the last show: keep it for the timing report anyway.
+  if (show.startedAt && !show.endedAt) keepPerformance({ complete: false });
   resetShowData();
   show.startedAt = new Date().toISOString();
   logEvent("show-start");
@@ -82,6 +85,12 @@ export function endShow() {
   if (show.intervalStartedAt) endInterval();
   show.endedAt = new Date().toISOString();
   logEvent("show-end");
+  keepPerformance();
+}
+
+function keepPerformance(options) {
+  const copy = JSON.parse(JSON.stringify(show));
+  archivePerformance(copy, options).catch((error) => console.warn("Could not save the performance:", error.message));
 }
 
 export function startInterval(plannedMinutes) {
@@ -103,6 +112,7 @@ export function endInterval() {
 }
 
 export function resetShow() {
+  if (show.startedAt && !show.endedAt) keepPerformance({ complete: false });
   resetShowData();
   scheduleSave();
 }

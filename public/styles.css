@@ -3923,3 +3923,77 @@ body.focus-mode .topbar {
 
 .desk-output-result[data-output="changed"] { color: var(--running); }
 .desk-output-result[data-output="unchanged"] { color: var(--warn); }
+
+/* --- Report: performances --- */
+
+.perf-panel {
+  margin-bottom: 14px;
+}
+
+.perf-headline {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  background: var(--warn-soft);
+}
+
+.perf-table td small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.perf-table .perf-long,
+.perf-drift .perf-long {
+  color: var(--danger);
+}
+
+.perf-table .perf-short,
+.perf-drift .perf-short {
+  color: var(--running);
+}
+
+.perf-table .perf-long small,
+.perf-table .perf-short small {
+  color: inherit;
+}
+
+.perf-average td {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.perf-label {
+  width: 100%;
+  min-width: 120px;
+  height: 32px;
+  padding: 0 8px;
+}
+
+.perf-drift {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+/* The GO log colours non-cue rows; the performance tables use colour only for long/short. */
+.report-table.perf-table tr td {
+  color: var(--text);
+}
+
+.report-table.perf-table td.perf-long {
+  color: var(--danger);
+}
+
+.report-table.perf-table td.perf-short {
+  color: var(--running);
+}
+
+.report-table.perf-table tr.perf-average td {
+  color: var(--muted);
+}
+
+#perfCuesBox {
+  margin-top: 14px;
+}
