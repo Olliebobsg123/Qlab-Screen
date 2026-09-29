@@ -9,6 +9,9 @@
 // Packet: "QC" | version (1 = 48 kHz, 2 = 24 kHz) | kind (0 audio, 1 ping, 2 pong) |
 // sender id (uint32) | seq (uint16) | sample count (uint16) | 16-bit samples or a float64 time.
 
+// Shown in the comms panel, so you can tell whether a device has the latest comms code.
+export const COMMS_BUILD = 7;
+
 const HEADER = 12;
 const KIND_AUDIO = 0;
 const KIND_PING = 1;

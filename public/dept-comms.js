@@ -1,4 +1,4 @@
-import { CommsClient } from "/comms.js";
+import { COMMS_BUILD, CommsClient } from "/comms.js";
 import { escapeHtml } from "/shared.js";
 
 // The comms dock on department pages: a bar at the bottom of the screen with a TALK button for
@@ -177,6 +177,8 @@ export async function setupComms({ fetchComms }) {
     }
     setText(".comms-error", client.error);
     const parts = client.latencyParts;
+    const routes = client.routes().map((entry) => `${entry.name}: ${entry.route}`).join(" · ");
+    setText(".comms-routes", `Comms build ${COMMS_BUILD}${routes ? ` · ${routes}` : ""}`);
     setText(".comms-breakdown", parts
       ? `${parts.fast ? "⚡ Fast comms. " : ""}Delay ≈${client.latencyMs} ms: network ${parts.network} ms · buffer ${parts.buffer} ms · devices ${parts.device} ms${parts.buffer > 80 ? " (a big buffer means an uneven connection: move closer to the router or use 5 GHz Wi-Fi)" : ""}`
       : "");
@@ -216,6 +218,7 @@ export async function setupComms({ fetchComms }) {
           <span></span>
         </div>
         <p class="comms-breakdown quiet"></p>
+        <p class="comms-routes comms-breakdown quiet"></p>
         <label class="comms-listen comms-option"><input type="checkbox" data-no-headphones ${prefs.noHeadphones ? "checked" : ""}><span>Not using headphones (turns on echo cancelling, adds a little delay)</span></label>
         <p class="comms-error"></p>
         <p class="comms-help quiet">Hold TALK to talk, or double-tap it to stay on (tap again to stop). Use headphones, and keep this screen on.</p>

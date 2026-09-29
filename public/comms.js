@@ -6,7 +6,9 @@
 
 // No DTX (silence suppression): with it, a quiet line sends a packet every ~400 ms, the receiver
 // takes the gaps for a bad network and grows its buffer, adding hundreds of ms to every voice.
-import { FastAudio, fastSupported } from "/fast-audio.js";
+import { COMMS_BUILD, FastAudio, fastSupported } from "/fast-audio.js";
+
+export { COMMS_BUILD };
 
 const VOICE_FMTP = "useinbandfec=1;usedtx=0;minptime=10";
 const FEED_FMTP = "stereo=1;sprop-stereo=1;maxaveragebitrate=128000;useinbandfec=1;usedtx=0";
@@ -273,6 +275,20 @@ export class CommsClient {
       }
       this.fast.setTargets(heard, reachable);
     }
+  }
+
+  // How my voice reaches each person, for the comms panel.
+  routes() {
+    return this.peers.filter((peer) => peer.kind === "user").map((peer) => {
+      const conn = this.conns.get(peer.id);
+      let route;
+      if (this.usesFast(peer)) route = "⚡ app";
+      else if (this.channelFast(peer, conn)) route = "⚡";
+      else if (!peer.fastWeb) route = "slow: reload that device's page (old version)";
+      else if (!this.fast) route = "slow: this browser can't do fast comms";
+      else route = conn?.pc.connectionState === "connected" ? "slow: fast channel didn't open" : "connecting…";
+      return { name: peer.name, route };
+    });
   }
 
   // Two desktop apps talk over fast comms (UDP) instead of WebRTC.
