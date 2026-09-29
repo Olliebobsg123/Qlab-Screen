@@ -38,4 +38,15 @@
     nav.innerHTML = html;
     nav.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
   }
+
+  // The logo, at the start of every page's title.
+  for (const title of document.querySelectorAll(".topbar-title")) {
+    if (title.querySelector(".brand-mark")) continue;
+    const logo = document.createElement("img");
+    logo.className = "brand-mark";
+    logo.src = "/logo.svg";
+    logo.alt = "";
+    title.classList.add("has-brand");
+    title.prepend(logo);
+  }
 })();

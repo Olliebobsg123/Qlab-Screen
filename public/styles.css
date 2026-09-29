@@ -3539,7 +3539,7 @@ body.focus-mode .topbar {
 
   .dept-shell .topbar-title { grid-area: 1 / 1; }
   .dept-shell #commsButton { grid-area: 1 / 2; }
-  .dept-shell #logoutButton { grid-area: 1 / 3; }
+  .dept-shell .settings-wrap { grid-area: 1 / 3; }
   .dept-shell #menuButton { grid-area: 1 / 4; }
   .dept-shell #commsButton .button-text { display: none; }
   .dept-shell .status-chips { grid-area: 2 / 1 / 3 / 5; }
@@ -4206,4 +4206,313 @@ body:has(.comms-dock:not([hidden])) .shell {
 
 #commsButton {
   white-space: nowrap;
+}
+
+/* --- Logo in page headers --- */
+
+.topbar-title.has-brand {
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+}
+
+.topbar-title.has-brand > :not(.brand-mark) {
+  grid-column: 2;
+}
+
+.brand-mark {
+  grid-row: 1 / span 2;
+  width: 40px;
+  height: 40px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+@media (max-width: 640px) {
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ===== Finishing touches: calmer header, settings menu, show lock, ON AIR, motion ===== */
+
+/* One quiet "all good" pill instead of several chips */
+.health-chip {
+  gap: 6px;
+  border-color: color-mix(in srgb, var(--running) 40%, var(--line));
+  color: var(--running);
+}
+
+.health-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--running);
+  box-shadow: 0 0 8px var(--running);
+}
+
+/* Settings menu (⚙) */
+.settings-wrap {
+  position: relative;
+}
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  display: grid;
+  gap: 4px;
+  width: 250px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  animation: pop-in 0.14s ease-out;
+}
+
+.settings-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.settings-item:hover {
+  background: var(--panel-strong);
+}
+
+.settings-item input {
+  width: 18px;
+  height: 18px;
+}
+
+.settings-item span {
+  display: grid;
+  font-weight: 700;
+}
+
+.settings-item small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.settings-lock,
+.settings-logout {
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.settings-logout {
+  background: transparent;
+  color: var(--muted);
+}
+
+@media (pointer: coarse) {
+  .keyboard-setting {
+    display: none;
+  }
+}
+
+/* Show lock: everything but GO, panic, TALK and Standing by ignores taps */
+body.show-locked .dept-shell {
+  pointer-events: none;
+}
+
+body.show-locked .dept-shell :is(.dept-go, #showGo, #panicButton, .comms-dock, #unlockButton) {
+  pointer-events: auto;
+}
+
+body.show-locked .dept-shell :is(.topnav, #menuButton, #settingsButton, #commsButton, .side-tabs, .go-steps, .go-card-top .small-button) {
+  opacity: 0.35;
+}
+
+.unlock-button {
+  position: relative;
+  overflow: hidden;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line));
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--warn);
+  font-weight: 800;
+  white-space: nowrap;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.show-locked .settings-wrap {
+  display: none;
+}
+
+.dept-shell .unlock-button { grid-area: 1 / 3; }
+
+.unlock-button .hold-fill {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: var(--warn-soft);
+}
+
+.unlock-button.holding .hold-fill {
+  width: 100%;
+  transition: width 1.2s linear;
+}
+
+.unlock-label {
+  position: relative;
+}
+
+/* ON AIR */
+.on-air {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 65;
+  padding: 8px 16px calc(8px);
+  padding-top: calc(8px + env(safe-area-inset-top));
+  background: var(--danger);
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-align: center;
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--danger) 45%, transparent);
+  animation: on-air-pulse 1.4s ease-in-out infinite alternate;
+}
+
+body.on-air-active .comms-talk.talking {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 35%, transparent), 0 0 28px color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+@keyframes on-air-pulse {
+  from { filter: brightness(1); }
+  to { filter: brightness(0.82); }
+}
+
+/* People on comms */
+.comms-people {
+  display: flex;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.comms-alone {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.person {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.person-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--person);
+  opacity: 0.6;
+}
+
+.person.busy {
+  border-style: dashed;
+}
+
+.person.speaking {
+  border-color: var(--person);
+  background: color-mix(in srgb, var(--person) 18%, transparent);
+  color: var(--text);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--person) 45%, transparent);
+}
+
+.person.speaking .person-dot {
+  opacity: 1;
+  animation: speaking 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes speaking {
+  from { transform: scale(1); box-shadow: 0 0 0 0 var(--person); }
+  to { transform: scale(1.35); box-shadow: 0 0 0 4px color-mix(in srgb, var(--person) 25%, transparent); }
+}
+
+/* Motion: new next cue slides in, new running cues fade in, panels pop */
+.go-card .go-next,
+.show-standby .go-next {
+  animation: cue-in 0.32s ease-out;
+}
+
+.dept-run {
+  animation: row-in 0.25s ease-out;
+}
+
+.cue-panel[open] {
+  animation: pop-in 0.18s ease-out;
+}
+
+.go-button:active:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+@keyframes cue-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .go-card .go-next,
+  .show-standby .go-next,
+  .dept-run,
+  .cue-panel[open],
+  .settings-menu,
+  .on-air,
+  .person.speaking .person-dot {
+    animation: none !important;
+  }
+}
+
+#commsButton {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .unlock-more {
+    display: none;
+  }
+
+  .unlock-button {
+    padding: 0 10px;
+  }
 }

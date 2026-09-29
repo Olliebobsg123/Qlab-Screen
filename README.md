@@ -625,6 +625,14 @@ The app isn't signed with an Apple or Microsoft developer certificate, so the fi
 - **Mac**: right-click the app → **Open** → **Open** (or System Settings → Privacy & Security → *Open Anyway*). Allow the microphone and "local network" when asked. If macOS says the app **"is damaged and can't be opened"**, it's only the download flag on an unsigned app: in Terminal run `xattr -cr "/Applications/QLab Connect.app"`, then open it again.
 - **Windows**: SmartScreen may say "Windows protected your PC": **More info → Run anyway**. When the firewall asks, allow it on **private networks** (fast comms and finding the show computer need it).
 
+## Department page extras
+
+- **⚙ menu** (top right): **Sounds** (a soft two-note chime when you get a standby, a brighter one on GO; on by default, per device), **Space bar = GO** (keyboards only), **Lock for the show**, and **Log out**.
+- **Lock for the show**: during a performance, everything except GO, panic, TALK and "Standing by" ignores taps, so nothing can be changed by accident. **Hold** the 🔒 button in the header to unlock. It stays locked through a page reload.
+- **Calm header**: a single "QLab" (or "QLab + desk") pill while everything is connected; the detailed chips only appear when something is wrong, or briefly when a lighting GO goes out.
+- **Comms**: everyone on comms shows as a chip in their department's colour, lit and pulsing while they're talking to you (dashed while they're talking on a channel you don't listen to). While you talk, a red **ON AIR** bar runs across the top of the screen.
+- Gentle motion when your next cue changes, a cue starts, or the cue panel opens (off if your device is set to reduce motion).
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

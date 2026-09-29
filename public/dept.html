@@ -7,6 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="stylesheet" href="/styles.css">
+    <link rel="icon" href="/logo.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0a0a0b">
   </head>
   <body class="dept-body server-offline">
     <main class="shell dept-shell">
@@ -19,11 +23,26 @@
         <div class="topbar-actions">
           <span class="status-chips">
             <span id="deptShowClock" class="status-chip show-clock" data-state="idle" hidden></span>
+            <!-- One quiet pill while everything's fine; the detailed chips appear only when not. -->
+            <span id="deptHealth" class="status-chip health-chip" data-state="on" hidden>All good</span>
             <span id="deptDesk" class="status-chip desk-chip" data-state="off" hidden title="Lighting desk">Desk</span>
             <span id="deptQlab" class="status-chip" data-state="off">QLab</span>
           </span>
           <button id="commsButton" type="button" class="tool-button" hidden aria-label="Comms">🎧<span class="button-text"> Comms</span></button>
-          <button id="logoutButton" type="button" class="tool-button">Log out</button>
+          <!-- Show lock: while locked, only GO, TALK and Standing by respond. Hold this to unlock. -->
+          <button id="unlockButton" type="button" class="unlock-button" hidden>
+            <span class="hold-fill" aria-hidden="true"></span>
+            <span class="unlock-label">🔒 Hold<span class="unlock-more"> to unlock</span></span>
+          </button>
+          <div class="settings-wrap">
+            <button id="settingsButton" type="button" class="tool-button" aria-expanded="false" aria-controls="settingsMenu" aria-label="Settings">⚙</button>
+            <div id="settingsMenu" class="settings-menu" hidden>
+              <label class="settings-item"><input id="deptSounds" type="checkbox"><span>Sounds <small>chime on standby and GO</small></span></label>
+              <label class="settings-item keyboard-setting"><input id="deptKeyboard" type="checkbox"><span>Space bar = GO <small>on this device</small></span></label>
+              <button id="lockButton" type="button" class="settings-lock">🔒 Lock for the show</button>
+              <button id="logoutButton" type="button" class="settings-logout">Log out</button>
+            </div>
+          </div>
           <button id="menuButton" type="button" class="tool-button menu-button" aria-expanded="false" aria-controls="deptNav">Menu</button>
         </div>
       </header>
@@ -164,10 +183,7 @@
         </div>
       </section>
 
-      <label class="toggle-row dept-keyboard">
-        <input id="deptKeyboard" type="checkbox">
-        <span>Space bar = GO on this device</span>
-      </label>
+      <div id="onAir" class="on-air" hidden aria-live="polite"></div>
 
       <!-- Options for one cue: start, standby, start from a point, pause, skip -->
       <dialog id="cuePanel" class="cue-panel">

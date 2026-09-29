@@ -24,6 +24,11 @@ const withQuery = (path, extra = "") => {
   return query ? `${path}?${query}` : path;
 };
 const KEYBOARD_KEY = "qlab-dept-keyboard";
+const SOUNDS_KEY = "qlab-dept-sounds";
+const LOCK_KEY = "qlab-dept-locked";
+const UNLOCK_HOLD_MS = 1200;
+let chimeContext = null;
+let lastLightKey = null; // my cue light last time, to chime when it changes
 const SIDE_TAB_KEY = "qlab-dept-side-tab";
 const COLORS = {
   red: "#ef4444", orange: "#f97316", yellow: "#facc15", green: "#4ade80",
@@ -71,6 +76,7 @@ setupStandbys();
 setupPresence();
 setupComms({ fetchComms: () => deptFetch(withQuery("/api/dept/comms"), { cache: "no-store" }).then((response) => response.json()) });
 setupKeyboard();
+setupSettings();
 
 // Fetch which cues this department owns. The list changes whenever cues are added, deleted or
 // edited in QLab, and QLab often makes several changes in a row (add, then number, then name).
@@ -138,11 +144,11 @@ function render() {
   const runningIds = new Set(running.map((cue) => cue.uniqueID));
   const standbyIds = new Set(standbyCueIds(showAll));
 
-  renderDesk();
-
   const qlab = $("#deptQlab");
   qlab.dataset.state = state.connected ? "on" : "off";
   qlab.textContent = state.connected ? "QLab connected" : "QLab offline";
+  renderDesk();
+  listenForStandbys();
 
   const problems = [];
   if (state.connected === false) problems.push("QLab isn't connected right now.");
@@ -352,6 +358,23 @@ function renderDesk() {
   chip.title = last
     ? `${desk.detail}\nLast: ${last.describe || last.cue} ${last.ok ? (last.delivered ? "delivered" : "sent (UDP, unconfirmed)") : "FAILED"} at ${new Date(last.at).toLocaleTimeString()}`
     : desk.detail;
+  chip.dataset.recent = String(Boolean(recent));
+  renderHealth();
+}
+
+// Keep the header calm: one "All good" pill while QLab (and the desk) are fine. The detailed chips
+// only appear when something's wrong, or briefly when a lighting GO goes out.
+function renderHealth() {
+  const qlabOk = state.connected !== false;
+  const desk = $("#deptDesk");
+  const deskOk = !state.desk || state.desk.online;
+  const deskFlash = state.desk && desk.dataset.recent === "true";
+  $("#deptQlab").hidden = qlabOk;
+  if (state.desk) desk.hidden = deskOk && !deskFlash;
+  const health = $("#deptHealth");
+  health.hidden = !(qlabOk && deskOk) || deskFlash;
+  health.textContent = state.desk ? "QLab + desk" : "QLab";
+  health.title = `QLab connected${state.desk ? ` · lighting desk connected (${state.desk.detail})` : ""}`;
 }
 
 // --- Who's online: tell the server this department's page is open ---
@@ -703,6 +726,112 @@ function setupKeyboard() {
     if (view.department.permissions?.includes("showGo")) showAct("go");
     else if (view.mode === "sequence" || view.lists[0]) act({ action: "go", listId: view.lists[0]?.id }, "GO");
   });
+}
+
+// --- Settings menu: sounds, space bar, show lock, log out ---
+
+
+function setupSettings() {
+  const menu = $("#settingsMenu");
+  const button = $("#settingsButton");
+  const toggleMenu = (open) => {
+    menu.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+  };
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleMenu(menu.hidden);
+  });
+  document.addEventListener("click", (event) => {
+    if (!menu.hidden && !event.target.closest(".settings-wrap")) toggleMenu(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") toggleMenu(false);
+  });
+
+  const sounds = $("#deptSounds");
+  sounds.checked = readStored(SOUNDS_KEY, true);
+  sounds.addEventListener("change", () => {
+    writeStored(SOUNDS_KEY, sounds.checked);
+    if (sounds.checked) chime("standby");
+  });
+
+  $("#lockButton").addEventListener("click", () => {
+    toggleMenu(false);
+    setLocked(true);
+  });
+  setLocked(readStored(LOCK_KEY, false));
+
+  // Hold to unlock, so a stray tap can't.
+  const unlock = $("#unlockButton");
+  let timer = null;
+  unlock.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    unlock.classList.add("holding");
+    timer = setTimeout(() => {
+      unlock.classList.remove("holding");
+      setLocked(false);
+    }, UNLOCK_HOLD_MS);
+  });
+  for (const type of ["pointerup", "pointerleave", "pointercancel"]) {
+    unlock.addEventListener(type, () => {
+      clearTimeout(timer);
+      unlock.classList.remove("holding");
+    });
+  }
+}
+
+// Show lock: only GO, panic, TALK and "Standing by" respond, so nothing else can be changed by
+// accident during a performance.
+function setLocked(locked) {
+  document.body.classList.toggle("show-locked", locked);
+  $("#unlockButton").hidden = !locked;
+  if (locked) {
+    $("#cuePanel").open && $("#cuePanel").close();
+    document.body.classList.remove("nav-open");
+  }
+  writeStored(LOCK_KEY, locked);
+}
+
+// --- Sounds: a soft chime when you get a standby, a brighter one on GO ---
+
+// Browsers only allow sound after a tap: get ready on the first one.
+document.addEventListener("pointerdown", () => {
+  if (!chimeContext && readStored(SOUNDS_KEY, true)) {
+    chimeContext = new AudioContext();
+  }
+  chimeContext?.resume().catch(() => {});
+}, { capture: true });
+
+function chime(kind) {
+  if (!readStored(SOUNDS_KEY, true)) return;
+  chimeContext ??= new AudioContext();
+  const context = chimeContext;
+  const now = context.currentTime + 0.02;
+  // Standby: two gentle notes going up. GO: one bright note.
+  const notes = kind === "go" ? [[1318.5, 0]] : [[659.3, 0], [880, 0.16]];
+  for (const [frequency, offset] of notes) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, now + offset);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + (kind === "go" ? 0.45 : 0.6));
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(now + offset);
+    oscillator.stop(now + offset + 0.7);
+  }
+}
+
+function listenForStandbys() {
+  const light = state.cueLights?.[view?.department.id];
+  const key = light ? `${light.state}:${light.at}` : "";
+  if (lastLightKey !== null && key !== lastLightKey && light) {
+    if (light.state === "standby") chime("standby");
+    else if (light.state === "go") chime("go");
+  }
+  lastLightKey = key;
 }
 
 // --- Helpers ---
