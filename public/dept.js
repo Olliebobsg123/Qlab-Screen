@@ -422,7 +422,7 @@ function renderStandbys() {
         <div class="light-row" data-state="${escapeHtml(light?.state || "off")}">
           <span class="light-name"><span class="dept-dot" style="--dept:${COLORS[department.color] || COLORS.blue}"></span>${escapeHtml(department.name)}${department.followStandby ? ' <span class="badge">follows</span>' : ""}
             <span class="presence" data-presence="${presence.state}" title="${escapeHtml(presence.text)}">${escapeHtml(presence.text)}</span></span>
-          <span class="light-status">${escapeHtml(labels[light?.state] || "Off")}${light?.cue ? ` · ${escapeHtml(light.cue)}` : ""}</span>
+          <span class="light-status">${escapeHtml(labels[light?.state] || "Off")}${light?.cue ? ` · ${escapeHtml(light.cue)}` : ""}${light?.auto ? " · auto" : ""}</span>
           <span class="light-controls">
             <select data-light-cue="${id}" aria-label="Cue for ${escapeHtml(department.name)}">${options}</select>
             <button type="button" class="light-standby-button" data-light="standby" data-target="${id}">Standby</button>

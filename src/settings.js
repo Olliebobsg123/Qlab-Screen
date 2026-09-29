@@ -162,6 +162,9 @@ function normalizeDepartment(saved) {
     // When the stage manager sends this department a standby for one of its cues, move its next
     // cue there and open that cue ready to play.
     followStandby: Boolean(saved.followStandby),
+    // Automatic standby: -1 off, 0 when its next cue is the show's next GO, N when it's N cues away.
+    autoStandby: Number.isInteger(Number(saved.autoStandby)) && Number(saved.autoStandby) >= 0 && Number(saved.autoStandby) <= 20
+      ? Number(saved.autoStandby) : -1,
     // Extra powers beyond firing its own cues (see DEPARTMENT_PERMISSIONS).
     permissions: list(saved.permissions).filter((permission) => DEPARTMENT_PERMISSIONS.includes(permission)),
     // Who this department may send backstage calls to ("all", "dashboard", "monitor" or department

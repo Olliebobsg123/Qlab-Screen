@@ -546,6 +546,10 @@ It checks again every 20 seconds while it's open.
 
 Each department page checks in every 10 seconds. The Stage Manager's **Standbys** tab shows each department's status next to its name: **Online**, **Open (screen off / in background)**, or **Last seen 5 min ago**. That way you know before you send a standby whether anyone is there to see it. The pre-show check uses the same information. "Open as admin" views don't count.
 
+### Automatic standbys
+
+In Admin → Departments, set **Automatic standby** on a department: *when its cue is the next GO*, or *1, 2, 3 or 5 cues before*. As the show's playhead gets that close to the department's next cue, its standby light comes on by itself with the cue named. When that cue plays (whoever fires it) the light shows GO and clears; if the show moves past it without playing it, the light clears. The Stage Manager sees "auto" next to these in the Standbys tab. A standby the Stage Manager sends by hand is never changed. This counts cues in the main cue list, so it works for cues in the show's list (a department that runs its own separate cue list isn't counted).
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

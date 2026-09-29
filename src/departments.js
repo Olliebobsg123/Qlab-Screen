@@ -57,6 +57,75 @@ export function stageManagerId() {
   return getDepartments().find((department) => department.role === "stageManager")?.id || "";
 }
 
+// --- Automatic standbys ---
+// A department can have its standby light come on by itself when its next cue is close in the
+// show (the main cue list's playhead is N cues before it). When that cue plays, the light shows GO
+// and clears; if the show moves past it without playing it, the light clears. Standbys the stage
+// manager sets by hand are left alone.
+const AUTO_STANDBY_TICK_MS = 250;
+setInterval(runAutoStandbys, AUTO_STANDBY_TICK_MS).unref();
+
+function departmentNextCue(department) {
+  if (departmentMode(department) === "sequence") return sequenceNext(department);
+  for (const listId of department.cueListIds) {
+    const id = listPlayhead(listId);
+    if (id) return id;
+  }
+  return "";
+}
+
+function runAutoStandbys() {
+  const departments = getDepartments().filter((department) => department.autoStandby >= 0 && department.role !== "stageManager");
+  if (!state.connected || !departments.length) return;
+  const cueMap = new Map(state.cues.map((cue) => [cue.uniqueID, cue]));
+  const standby = cueMap.get(state.standbyId);
+  const mainList = standby ? rootListId(standby, cueMap) : "";
+  const position = new Map(state.cues.filter((cue) => cue.parentId === mainList).map((cue, index) => [cue.uniqueID, index]));
+  // The top-level cue in the main list that holds this cue (itself, or the group it's in).
+  const topOf = (id) => {
+    let cue = cueMap.get(id);
+    while (cue && cue.parentId !== mainList && cueMap.get(cue.parentId)) cue = cueMap.get(cue.parentId);
+    return cue?.parentId === mainList ? cue.uniqueID : "";
+  };
+  const running = new Set(state.running.map((cue) => cue.uniqueID));
+  const standbyPosition = position.get(topOf(state.standbyId));
+  let changed = false;
+
+  for (const department of departments) {
+    const light = getCueLight(department.id);
+    if (light?.auto && light.cueId && light.state !== "go" && running.has(light.cueId)) {
+      setCueLight(department.id, "go", {}, broadcastPatch);
+      changed = true;
+      continue;
+    }
+    const next = departmentNextCue(department);
+    const nextPosition = next && next !== END ? position.get(topOf(next)) : undefined;
+    const distance = nextPosition != null && standbyPosition != null ? nextPosition - standbyPosition : null;
+    const wanted = distance != null && distance >= 0 && distance <= department.autoStandby ? next : "";
+
+    if (light && !light.auto) continue;
+    if (light?.auto && light.state === "go") continue;
+    if (light?.auto && light.cueId === wanted) continue;
+    if (!wanted) {
+      if (light?.auto) {
+        setCueLight(department.id, "clear");
+        changed = true;
+      }
+      continue;
+    }
+    const cue = cueMap.get(wanted);
+    setCueLight(department.id, "standby", {
+      cue: cue ? `${cue.number ? `${cue.number} ` : ""}${cue.name || cue.type || ""}`.trim() : "",
+      cueId: wanted,
+      by: "Auto standby",
+      auto: true
+    });
+    logEvent("cue-light", `Auto standby → ${department.name}${cue ? `: ${cue.number || ""} ${cue.name || ""}`.trimEnd() : ""}`);
+    changed = true;
+  }
+  if (changed) broadcastPatch();
+}
+
 // Every screen gets each department's next cue; department pages show their own.
 registerMetaProvider(() => ({ deptNext: departmentNextIds(), cueLights: publicCueLights() }));
 registerNoteIds(() => Object.values(departmentNextIds()));
@@ -516,6 +585,7 @@ function publicDepartment(department) {
     namePrefixes: department.namePrefixes,
     role: department.role,
     followStandby: department.followStandby,
+    autoStandby: department.autoStandby,
     permissions: department.permissions,
     pageTargets: department.pageTargets
   };

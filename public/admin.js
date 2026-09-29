@@ -269,6 +269,13 @@ function renderDepartments() {
       <label class="toggle-row follow-standby">
         <input type="checkbox" name="followStandby" ${department.followStandby ? "checked" : ""}>
         <span><strong>Follow standbys</strong> <span class="quiet">When the stage manager calls a standby for one of its cues, that cue becomes its next cue and opens on its screen, ready to play.</span></span>
+      </label>
+      <label class="auto-standby-row">
+        <span><strong>Automatic standby</strong> <span class="quiet">Its standby light comes on by itself as its next cue gets close, then shows GO when the cue plays.</span></span>
+        <select name="autoStandby">
+          ${[[-1, "Off"], [0, "When its cue is the next GO"], [1, "1 cue before"], [2, "2 cues before"], [3, "3 cues before"], [5, "5 cues before"]]
+            .map(([value, text]) => `<option value="${value}" ${Number(department.autoStandby ?? -1) === value ? "selected" : ""}>${text}</option>`).join("")}
+        </select>
       </label>`}
       <div class="dept-card-row call-targets" ${(department.permissions || []).includes("paging") ? "" : "hidden"}>
         <fieldset class="chip-set">
@@ -332,6 +339,7 @@ function readDepartmentEdits() {
       ? Array.from(card.querySelectorAll("[name=pageTarget]:checked")).map((input) => input.value)
       : [];
     department.followStandby = Boolean(card.querySelector("[name=followStandby]")?.checked);
+    department.autoStandby = Number(card.querySelector("[name=autoStandby]")?.value ?? -1);
     department.namePrefixes = card.querySelector("[name=prefixes]").value.split(",").map((value) => value.trim()).filter(Boolean);
     const password = card.querySelector("[name=password]").value;
     if (password) passwords[department.id] = password;
