@@ -42,6 +42,8 @@ const notesInFlight = new Set();
 // Playhead per cue list; the screens show the one for the list the operator is working in.
 const playheads = new Map();
 let activeListId = "";
+// True once the operator has moved a playhead in QLab, which picks the list to show.
+let activeFromOperator = false;
 let playheadField = "";
 let refreshQueued = { queued: false, forceCues: false };
 let pollTimer = null;
@@ -107,6 +109,7 @@ export async function connectToQlab(connection) {
   staleNotes.clear();
   playheads.clear();
   activeListId = "";
+  activeFromOperator = false;
   playheadField = "";
   resetRunningTracking();
   resetDeskTracking();
@@ -501,7 +504,12 @@ function normalizeReply(packet) {
     const playheadMatch = packet.address.match(/\/cueList\/([^/]+)\/(playbackPosition|playhead)$/);
     if (playheadMatch) {
       // The operator moved this list's playhead, so it's the list to show.
-      activeListId = playheadMatch[1];
+      // (Carts and emptied playheads don't count: nothing would be left on standby.)
+      const moved = cueLists().find((list) => list.uniqueID === playheadMatch[1]);
+      if (normalizeCueId(packet.args[0]) && moved?.type !== "Cue Cart") {
+        activeListId = playheadMatch[1];
+        activeFromOperator = true;
+      }
       setListPlayhead(playheadMatch[1], String(packet.args[0] ?? ""));
     }
     const cueMatch = packet.address.match(/\/cue_id\/([^/]+)$/);
@@ -568,10 +576,6 @@ async function refreshAllPlayheads() {
     const result = await queryPlayhead(list.uniqueID);
     if (result.ok) playheads.set(list.uniqueID, normalizeCueId(result.cueId));
   }
-  if (!activeListId) {
-    // Start on the first list that has a playhead (carts don't).
-    activeListId = cueLists().find((list) => playheads.get(list.uniqueID))?.uniqueID || cueLists()[0]?.uniqueID || "";
-  }
   applyStandby();
 }
 
@@ -579,7 +583,6 @@ async function refreshAllPlayheads() {
 // Every cue list is polled (departments each follow their own list); workspaces have only a few.
 async function refreshActivePlayhead() {
   if (!state.connected || playheadBusy) return;
-  if (!activeListId && cueLists().length) activeListId = cueLists()[0].uniqueID;
   const now = Date.now();
   // Carts have no playhead, and lists that didn't answer recently are skipped for a while.
   const lists = cueLists()
@@ -636,7 +639,16 @@ function setListPlayhead(listId, cueId) {
   applyStandby();
 }
 
+// Until the operator moves a playhead, show the first cue list that has one. (Picking a list
+// before its playhead was read, or a cart, used to leave nothing on standby.)
+function chooseActiveList() {
+  if (activeFromOperator && activeListId) return;
+  const lists = cueLists().filter((list) => list.type !== "Cue Cart");
+  activeListId = lists.find((list) => playheads.get(list.uniqueID))?.uniqueID || lists[0]?.uniqueID || "";
+}
+
 function applyStandby() {
+  chooseActiveList();
   const nextId = playheads.get(activeListId) || "";
   const nextPlayheads = Object.fromEntries(playheads);
   if (nextId === state.standbyId && JSON.stringify(nextPlayheads) === JSON.stringify(state.playheads)) return;

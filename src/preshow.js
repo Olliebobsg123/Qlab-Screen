@@ -36,10 +36,12 @@ export async function runPreshowCheck() {
   if (state.connected) {
     const running = state.running.filter((cue) => cue.type !== "Cue List");
     if (running.length) add("QLab", "warn", `${running.length} cue${running.length === 1 ? " is" : "s are"} still playing`, running.slice(0, 5).map(label).join(", "));
-    const standby = state.cues.find((cue) => cue.uniqueID === state.standbyId);
+    // The shown list's playhead, else any list that has one.
+    const standbyIds = [state.standbyId, ...Object.values(state.playheads || {})].filter(Boolean);
+    const standby = standbyIds.map((id) => state.cues.find((cue) => cue.uniqueID === id)).find(Boolean);
     const list = standby && state.cues.find((cue) => cue.uniqueID === rootOf(standby));
     const first = list && state.cues.find((cue) => cue.parentId === list.uniqueID);
-    if (!standby) add("QLab", "warn", "Nothing is on standby", "Set the playhead to the first cue.");
+    if (!standby) add("QLab", "warn", "QLab's playhead is empty", "Click the first cue in QLab so it's standing by (QLab clears the playhead after the last cue).");
     else if (first && first.uniqueID !== standby.uniqueID) add("QLab", "warn", `Standing by on ${label(standby)}, not the first cue`, `The first cue is ${label(first)}.`);
     else add("QLab", "ok", `Standing by on ${label(standby)}`);
 
@@ -84,19 +86,21 @@ export async function runPreshowCheck() {
 
   // --- Departments ---
   const online = presence();
+  const group = "Departments";
+  const here = [];
+  const away = [];
   for (const department of settings.departments) {
-    const group = "Departments";
     if (!department.passwordHash) {
       add(group, "warn", `${department.name} has no password`, "Nobody can log in to it.", "Admin → Departments → set a password.");
       continue;
     }
     const owned = department.role === "stageManager" ? cues.length : departmentCueIds(department).length;
-    const here = online[department.id];
     if (!owned) add(group, "warn", `${department.name} has no cues`, "Nothing in this workspace is assigned to it.", "Admin → Departments → choose its cue types or lists.");
-    if (here?.online && !here.hidden) add(group, "ok", `${department.name} is online`, `${owned} cue${owned === 1 ? "" : "s"}${here.screens > 1 ? ` · ${here.screens} screens` : ""}`);
-    else if (here?.online) add(group, "warn", `${department.name}'s screen is off or in the background`, "It'll still get standbys, but may not show them until it's woken up.");
-    else add(group, "warn", `${department.name} isn't logged in`, here ? `Last seen ${ago(here.lastSeenAt)}.` : "Nobody has opened its page yet.");
+    (online[department.id]?.online ? here : away).push(department.name);
   }
+  // Departments come and go (phones sleep, people log in late), so this only needs someone on.
+  if (here.length) add(group, "ok", `${names(here)} ${here.length === 1 ? "is" : "are"} logged in`, away.length ? `Not on yet: ${names(away)}.` : "");
+  else if (away.length) add(group, "warn", "Nobody is logged in yet", `Departments: ${names(away)}.`);
 
   // --- Leftovers from rehearsal ---
   const lights = Object.keys(publicCueLights());
@@ -171,7 +175,6 @@ function label(cue) {
   return `${cue.number ? `${cue.number} ` : ""}${cue.name || cue.type || ""}`.trim() || "(unnamed)";
 }
 
-function ago(iso) {
-  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000);
-  return minutes < 1 ? "just now" : minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
+function names(list) {
+  return list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list.at(-1)}` : list.join("");
 }
