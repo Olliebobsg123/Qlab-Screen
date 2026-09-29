@@ -63,8 +63,9 @@ export class CommsClient {
             latency: { ideal: 0.01 }
           }
         });
+        // The original track only feeds the level meter; each connection sends its own copy,
+        // switched on only while you talk to someone listening on that channel.
         this.micTrack = this.micStream.getAudioTracks()[0];
-        this.micTrack.enabled = false;
         this.watchMicLevel();
       } catch (error) {
         // Still useful: you can listen without a mic.
@@ -138,6 +139,7 @@ export class CommsClient {
     } else if (message.type === "peers") {
       this.peers = message.peers.filter((peer) => peer.id !== this.id);
       this.syncConns();
+      this.updateSending();
       this.applyGains();
       this.onChange();
     } else if (message.type === "signal") {
@@ -170,7 +172,9 @@ export class CommsClient {
 
   setFeed(on) {
     this.feedOn = on;
+    // Tell everyone first, then connect to (or drop) the feed.
     this.sendState();
+    this.syncConns();
     this.applyGains();
     this.onChange();
   }
@@ -204,10 +208,25 @@ export class CommsClient {
   }
 
   updateMic() {
-    if (this.micTrack) this.micTrack.enabled = this.talking.size > 0;
+    this.updateSending();
     this.sendState();
     this.applyGains();
     this.onChange();
+  }
+
+  // Should my voice go to this person right now? Only while I'm talking on a channel they listen
+  // to (TALK ALL: anyone listening to anything). Everyone else gets silence, so nobody's player
+  // ever has to be muted (a muted player lets audio pile up, adding delay).
+  shouldSendTo(peer) {
+    if (!peer || peer.kind !== "user" || !this.talking.size) return false;
+    if (this.talking.has("*")) return peer.listen.length > 0;
+    return [...this.talking].some((id) => peer.listen.includes(id));
+  }
+
+  updateSending() {
+    for (const [peerId, conn] of this.conns) {
+      if (conn.sendTrack) conn.sendTrack.enabled = this.shouldSendTo(this.peers.find((peer) => peer.id === peerId));
+    }
   }
 
   // Who is talking on this channel right now (for the lights next to each channel).
@@ -221,14 +240,18 @@ export class CommsClient {
 
   // --- Connections ---
 
+  // The show feed only connects to people who've switched it on.
   wants(peer) {
-    if (this.mode === "feed") return peer.kind === "user";
+    if (!peer) return false;
+    if (this.mode === "feed") return peer.kind === "user" && peer.feed;
+    if (peer.kind === "feed") return this.feedOn;
     return true;
   }
 
   syncConns() {
-    const present = new Set(this.peers.map((peer) => peer.id));
-    for (const id of [...this.conns.keys()]) if (!present.has(id)) this.dropConn(id);
+    for (const id of [...this.conns.keys()]) {
+      if (!this.wants(this.peers.find((peer) => peer.id === id))) this.dropConn(id);
+    }
     for (const peer of this.peers) {
       if (!this.wants(peer) || this.conns.has(peer.id)) continue;
       // The device with the lower number makes the offer; the other answers.
@@ -252,7 +275,8 @@ export class CommsClient {
       } else if (peer?.kind === "feed" || !this.micTrack) {
         pc.addTransceiver("audio", { direction: "recvonly" });
       } else {
-        pc.addTransceiver(this.micTrack, { direction: "sendrecv", streams: [this.micStream] });
+        this.makeSendTrack(conn);
+        pc.addTransceiver(conn.sendTrack, { direction: "sendrecv", streams: [conn.sendStream] });
       }
     }
 
@@ -271,6 +295,13 @@ export class CommsClient {
     return conn;
   }
 
+  makeSendTrack(conn) {
+    conn.sendTrack = this.micTrack.clone();
+    conn.sendTrack.enabled = false;
+    conn.sendStream = new MediaStream([conn.sendTrack]);
+    this.updateSending();
+  }
+
   async makeOffer(peerId, conn) {
     const offer = await conn.pc.createOffer();
     offer.sdp = tuneOpus(offer.sdp, conn.feed);
@@ -282,6 +313,7 @@ export class CommsClient {
     let conn = this.conns.get(from);
     if (!conn) {
       if (!data.description || data.description.type !== "offer") return;
+      if (!this.wants(this.peers.find((peer) => peer.id === from))) return;
       conn = this.createConn(from, false);
     }
     const { pc } = conn;
@@ -290,7 +322,7 @@ export class CommsClient {
         const description = { type: data.description.type, sdp: tuneOpus(data.description.sdp, conn.feed) };
         await pc.setRemoteDescription(description);
         if (description.type === "offer") {
-          await this.setupAnswer(from, pc);
+          await this.setupAnswer(from, conn);
           const answer = await pc.createAnswer();
           answer.sdp = tuneOpus(answer.sdp, conn.feed);
           await pc.setLocalDescription(answer);
@@ -306,8 +338,8 @@ export class CommsClient {
     }
   }
 
-  async setupAnswer(peerId, pc) {
-    const transceiver = pc.getTransceivers()[0];
+  async setupAnswer(peerId, conn) {
+    const transceiver = conn.pc.getTransceivers()[0];
     if (!transceiver) return;
     const peer = this.peers.find((entry) => entry.id === peerId);
     if (this.mode === "feed") {
@@ -321,8 +353,9 @@ export class CommsClient {
       transceiver.direction = "recvonly";
     } else {
       transceiver.direction = "sendrecv";
-      await transceiver.sender.replaceTrack(this.micTrack);
-      transceiver.sender.setStreams?.(this.micStream);
+      this.makeSendTrack(conn);
+      await transceiver.sender.replaceTrack(conn.sendTrack);
+      transceiver.sender.setStreams?.(conn.sendStream);
     }
   }
 
@@ -338,7 +371,6 @@ export class CommsClient {
     element.autoplay = true;
     element.playsInline = true;
     element.srcObject = stream;
-    element.muted = true;
     element.play().catch(() => {});
     conn.element = element;
     this.applyGains();
@@ -348,6 +380,7 @@ export class CommsClient {
     const conn = this.conns.get(peerId);
     if (!conn) return;
     this.conns.delete(peerId);
+    conn.sendTrack?.stop();
     if (conn.element) {
       conn.element.pause();
       conn.element.srcObject = null;
@@ -364,19 +397,23 @@ export class CommsClient {
     return channels.length ? Math.max(...channels.map((id) => this.volumes[id] ?? 0.9)) : 0;
   }
 
-  // Voices you shouldn't hear are muted; the rest play at their channel's volume (iPhones ignore
-  // page volume, so there it's the phone's volume buttons).
+  // Players are never muted (a muted player lets audio pile up and adds delay): voices that aren't
+  // for you arrive as silence. Volume follows the channel (iPhones ignore page volume, so there
+  // it's the phone's volume buttons).
   applyGains() {
+    const listening = [...this.listen].map((id) => this.volumes[id] ?? 0.9);
+    const fallback = listening.length ? Math.max(...listening) : 0.9;
     for (const [peerId, conn] of this.conns) {
       if (!conn.element) continue;
-      const level = this.levelFor(this.peers.find((peer) => peer.id === peerId));
-      conn.element.muted = level === 0;
+      const peer = this.peers.find((entry) => entry.id === peerId);
+      const level = peer?.kind === "feed" ? this.volumes.feed : this.levelFor(peer) || fallback;
+      conn.element.muted = false;
       try {
-        conn.element.volume = level || 1;
+        conn.element.volume = level;
       } catch {
         // Fixed volume on this device.
       }
-      if (level > 0 && conn.element.paused) conn.element.play().catch(() => {});
+      if (conn.element.paused) conn.element.play().catch(() => {});
     }
   }
 
