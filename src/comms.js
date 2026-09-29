@@ -111,6 +111,8 @@ function join(ws, ticket, ip) {
       peer.talking = (Array.isArray(message.talking) ? message.talking : [])
         .filter((id) => channelIds.has(id) || (id === "*" && peer.allTalk)).slice(0, 16);
       peer.feed = Boolean(message.feed);
+      // Can take fast comms over a browser data channel (see public/fast-audio.js).
+      peer.fastWeb = Boolean(message.fastWeb);
       const port = Number(message.nativePort);
       peer.native = Number.isInteger(port) && port > 0 && port < 65536 ? { ip: peer.ip, port } : null;
       broadcastPeers();
@@ -139,7 +141,8 @@ function publicPeer(peer) {
     listen: peer.listen,
     talking: peer.talking,
     feed: peer.feed,
-    native: peer.native
+    native: peer.native,
+    fastWeb: Boolean(peer.fastWeb)
   };
 }
 

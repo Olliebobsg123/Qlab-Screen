@@ -178,7 +178,7 @@ export async function setupComms({ fetchComms }) {
     setText(".comms-error", client.error);
     const parts = client.latencyParts;
     setText(".comms-breakdown", parts
-      ? `${parts.fast ? "⚡ Fast comms (app). " : ""}Delay ≈${client.latencyMs} ms: network ${parts.network} ms · buffer ${parts.buffer} ms · devices ${parts.device} ms${parts.buffer > 80 ? " (a big buffer means an uneven connection: move closer to the router or use 5 GHz Wi-Fi)" : ""}`
+      ? `${parts.fast ? "⚡ Fast comms. " : ""}Delay ≈${client.latencyMs} ms: network ${parts.network} ms · buffer ${parts.buffer} ms · devices ${parts.device} ms${parts.buffer > 80 ? " (a big buffer means an uneven connection: move closer to the router or use 5 GHz Wi-Fi)" : ""}`
       : "");
     const meter = dock.querySelector(".comms-mic-level");
     if (meter) meter.style.setProperty("--level", String(Math.min(1, (client.micLevel || 0) * 3)));

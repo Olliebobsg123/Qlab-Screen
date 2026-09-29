@@ -1,11 +1,13 @@
-// Fast comms for the desktop app: voices go straight between apps on the local network as raw
-// 5 ms audio packets over UDP (no codec, no browser buffering), played through a tiny buffer we
-// control. Typically 25-50 ms mouth to ear, versus 100+ ms through a browser.
-// Only used when the page runs inside the QLab Connect app (window.qlabNative); browsers and
-// phones keep using WebRTC (comms.js), and app <-> phone calls go that way too.
+// Fast comms: voices sent as raw 5 ms audio packets with a tiny playout buffer we control (see
+// fast-audio-worklet.js), instead of WebRTC's own audio path, which buffers far more.
+// Two ways to carry the packets:
+//   - Browsers (Chromebooks, phones, any Chrome): a WebRTC data channel set to never resend
+//     (unordered, no retransmits), which behaves like direct UDP between the two devices.
+//   - The QLab Connect desktop app: real UDP (window.qlabNative), app to app.
+// Browser packets are 24 kHz (half the data, plenty for speech); app packets are 48 kHz.
 //
-// Packet: "QC" | version | kind (0 audio, 1 ping, 2 pong) | sender id (uint32) | seq (uint16) |
-// sample count (uint16) | 16-bit samples (audio) or a float64 timestamp (ping/pong).
+// Packet: "QC" | version (1 = 48 kHz, 2 = 24 kHz) | kind (0 audio, 1 ping, 2 pong) |
+// sender id (uint32) | seq (uint16) | sample count (uint16) | 16-bit samples or a float64 time.
 
 const HEADER = 12;
 const KIND_AUDIO = 0;
@@ -17,19 +19,24 @@ export function nativeAvailable() {
   return Boolean(globalThis.qlabNative?.openAudioSocket);
 }
 
+export function fastSupported() {
+  return typeof AudioWorkletNode !== "undefined";
+}
+
 export class FastAudio {
   constructor({ context, micStream, myId }) {
-    this.native = globalThis.qlabNative;
+    this.native = nativeAvailable() ? globalThis.qlabNative : null;
     this.context = context;
     this.micStream = micStream;
     this.myId = myId;
     this.targets = [];
     this.everyone = [];
     this.seq = 0;
-    this.rtt = new Map(); // "ip:port" -> ms
+    this.rtt = new Map(); // target key -> ms
     this.stats = { bufferMs: 0, targetMs: 0, gaps: 0 };
   }
 
+  // Returns the app's UDP port, or null in a browser.
   async start() {
     await this.context.audioWorklet.addModule("/fast-audio-worklet.js");
     this.mixer = new AudioWorkletNode(this.context, "qc-mixer", { numberOfInputs: 0, outputChannelCount: [2] });
@@ -42,24 +49,41 @@ export class FastAudio {
       this.context.createMediaStreamSource(this.micStream).connect(this.capture);
       this.capture.port.onmessage = (event) => this.sendFrame(event.data);
     }
-    this.port = await this.native.openAudioSocket();
-    this.native.onPacket((buffer, ip, port) => this.onPacket(buffer, ip, port));
     this.pingTimer = setInterval(() => this.ping(), PING_MS);
-    return this.port;
+    if (!this.native) return null;
+    const port = await this.native.openAudioSocket();
+    this.native.onPacket((buffer, ip, target) => this.receive(buffer, this.udpTarget({ ip, port: target })));
+    return port;
   }
 
   stop() {
     clearInterval(this.pingTimer);
     this.capture?.disconnect();
     this.mixer?.disconnect();
-    this.native.closeAudioSocket?.();
+    this.native?.closeAudioSocket?.();
   }
 
   setId(id) {
     this.myId = id;
   }
 
-  // Who hears me right now ([{ ip, port }]), and every app on comms (for delay checks).
+  // A place to send packets: { key, wide (48 kHz?), send(packet) }.
+  udpTarget({ ip, port }) {
+    return { key: `udp:${ip}:${port}`, wide: true, send: (packet) => this.native?.send(packet, ip, port) };
+  }
+
+  channelTarget(peerId, channel) {
+    return {
+      key: `dc:${peerId}`,
+      wide: false,
+      send: (packet) => {
+        // Skip rather than queue if the channel is backed up: late audio is worse than a gap.
+        if (channel.readyState === "open" && channel.bufferedAmount < 16384) channel.send(packet);
+      }
+    };
+  }
+
+  // Who hears me right now, and everyone reachable this way (for delay checks).
   setTargets(targets, everyone) {
     this.targets = targets;
     this.everyone = everyone;
@@ -71,47 +95,74 @@ export class FastAudio {
 
   sendFrame(frame) {
     if (!this.targets.length) return;
-    const packet = new ArrayBuffer(HEADER + frame.length * 2);
-    const view = new DataView(packet);
-    this.writeHeader(view, KIND_AUDIO, frame.length);
-    const samples = new Int16Array(packet, HEADER);
-    for (let index = 0; index < frame.length; index += 1) {
-      const value = Math.max(-1, Math.min(1, frame[index]));
-      samples[index] = value < 0 ? value * 0x8000 : value * 0x7fff;
+    let wide = null;
+    let narrow = null;
+    for (const target of this.targets) {
+      if (target.wide) target.send(wide ??= this.packAudio(frame, 1));
+      else target.send(narrow ??= this.packAudio(frame, 2));
     }
-    for (const target of this.targets) this.native.send(packet, target.ip, target.port);
   }
 
-  writeHeader(view, kind, count) {
+  packAudio(frame, version) {
+    const step = version === 2 ? 2 : 1;
+    const count = Math.floor(frame.length / step);
+    const packet = new ArrayBuffer(HEADER + count * 2);
+    const view = new DataView(packet);
+    this.writeHeader(view, version, KIND_AUDIO, count);
+    const samples = new Int16Array(packet, HEADER);
+    for (let index = 0; index < count; index += 1) {
+      // 24 kHz: average each pair (a simple filter against harshness), then keep one.
+      const raw = step === 2 ? (frame[index * 2] + frame[index * 2 + 1]) / 2 : frame[index];
+      const value = Math.max(-1, Math.min(1, raw));
+      samples[index] = value < 0 ? value * 0x8000 : value * 0x7fff;
+    }
+    return packet;
+  }
+
+  writeHeader(view, version, kind, count) {
     view.setUint8(0, 0x51);
     view.setUint8(1, 0x43);
-    view.setUint8(2, 1);
+    view.setUint8(2, version);
     view.setUint8(3, kind);
     view.setUint32(4, idNumber(this.myId), true);
     view.setUint16(8, this.seq = (this.seq + 1) & 0xffff, true);
     view.setUint16(10, count, true);
   }
 
-  onPacket(buffer, ip, port) {
-    if (buffer.byteLength < HEADER) return;
+  // A packet from a data channel or UDP. `from` is where to answer pings.
+  receive(buffer, from) {
+    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < HEADER) return;
     const view = new DataView(buffer);
     if (view.getUint8(0) !== 0x51 || view.getUint8(1) !== 0x43) return;
+    const version = view.getUint8(2);
     const kind = view.getUint8(3);
     const sender = `p${view.getUint32(4, true)}`;
     if (kind === KIND_AUDIO) {
       const count = Math.min(view.getUint16(10, true), (buffer.byteLength - HEADER) / 2);
       const pcm = new Int16Array(buffer, HEADER, count);
-      const samples = new Float32Array(count);
-      for (let index = 0; index < count; index += 1) samples[index] = pcm[index] / 0x8000;
+      let samples;
+      if (version === 2) {
+        // Back up to 48 kHz by drawing a straight line between each pair of samples.
+        samples = new Float32Array(count * 2);
+        for (let index = 0; index < count; index += 1) {
+          const current = pcm[index] / 0x8000;
+          const next = index + 1 < count ? pcm[index + 1] / 0x8000 : current;
+          samples[index * 2] = current;
+          samples[index * 2 + 1] = (current + next) / 2;
+        }
+      } else {
+        samples = new Float32Array(count);
+        for (let index = 0; index < count; index += 1) samples[index] = pcm[index] / 0x8000;
+      }
       this.mixer?.port.postMessage({ type: "frame", id: sender, samples }, [samples.buffer]);
     } else if (kind === KIND_PING && buffer.byteLength >= HEADER + 8) {
-      // Send the timestamp straight back.
       const reply = buffer.slice(0);
-      new DataView(reply).setUint8(3, KIND_PONG);
-      new DataView(reply).setUint32(4, idNumber(this.myId), true);
-      this.native.send(reply, ip, port);
+      const replyView = new DataView(reply);
+      replyView.setUint8(3, KIND_PONG);
+      replyView.setUint32(4, idNumber(this.myId), true);
+      from.send(reply);
     } else if (kind === KIND_PONG && buffer.byteLength >= HEADER + 8) {
-      this.rtt.set(`${ip}:${port}`, performance.now() - view.getFloat64(HEADER, true));
+      this.rtt.set(from.key, performance.now() - view.getFloat64(HEADER, true));
     }
   }
 
@@ -119,11 +170,11 @@ export class FastAudio {
     for (const target of this.everyone) {
       const packet = new ArrayBuffer(HEADER + 8);
       const view = new DataView(packet);
-      this.writeHeader(view, KIND_PING, 0);
+      this.writeHeader(view, 1, KIND_PING, 0);
       view.setFloat64(HEADER, performance.now(), true);
-      this.native.send(packet, target.ip, target.port);
+      target.send(packet);
     }
-    const alive = new Set(this.everyone.map((target) => `${target.ip}:${target.port}`));
+    const alive = new Set(this.everyone.map((target) => target.key));
     for (const key of this.rtt.keys()) if (!alive.has(key)) this.rtt.delete(key);
   }
 

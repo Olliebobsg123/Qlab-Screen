@@ -6,7 +6,7 @@
 
 // No DTX (silence suppression): with it, a quiet line sends a packet every ~400 ms, the receiver
 // takes the gaps for a bad network and grows its buffer, adding hundreds of ms to every voice.
-import { FastAudio, nativeAvailable } from "/fast-audio.js";
+import { FastAudio, fastSupported } from "/fast-audio.js";
 
 const VOICE_FMTP = "useinbandfec=1;usedtx=0;minptime=10";
 const FEED_FMTP = "stereo=1;sprop-stereo=1;maxaveragebitrate=128000;useinbandfec=1;usedtx=0";
@@ -52,9 +52,9 @@ export class CommsClient {
     this.running = true;
     this.error = "";
     this.setStatus("starting");
-    // In the desktop app, ask for the lowest output delay the computer offers, at 48 kHz to match
-    // fast comms packets.
-    this.audioContext = nativeAvailable() && this.mode === "user"
+    // For talkback, ask for the lowest output delay the device offers, at 48 kHz to match fast
+    // comms packets (every device must run at the same rate, or voices would change pitch).
+    this.audioContext = this.mode === "user" && fastSupported()
       ? new AudioContext({ latencyHint: 0, sampleRate: 48000 })
       : new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume().catch(() => {});
@@ -78,7 +78,7 @@ export class CommsClient {
         this.error = `No microphone (${error.message}). You can listen, but not talk.`;
       }
     }
-    if (this.mode === "user" && nativeAvailable()) {
+    if (this.mode === "user" && fastSupported()) {
       try {
         this.fast = new FastAudio({ context: this.audioContext, micStream: this.micStream, myId: this.id });
         this.nativePort = await this.fast.start();
@@ -173,7 +173,14 @@ export class CommsClient {
   }
 
   sendState() {
-    this.send({ type: "state", listen: [...this.listen], talking: [...this.talking], feed: this.feedOn, nativePort: this.nativePort || null });
+    this.send({
+      type: "state",
+      listen: [...this.listen],
+      talking: [...this.talking],
+      feed: this.feedOn,
+      nativePort: this.nativePort || null,
+      fastWeb: Boolean(this.fast)
+    });
   }
 
   // --- Talk and listen ---
@@ -242,19 +249,40 @@ export class CommsClient {
     return [...this.talking].some((id) => peer.listen.includes(id));
   }
 
+  // Where my voice goes: over fast comms (app UDP, or a browser data channel) when both ends can,
+  // otherwise the WebRTC audio track. Only one of them ever carries audio to a given person.
   updateSending() {
+    const heard = [];
+    const reachable = [];
     for (const [peerId, conn] of this.conns) {
-      if (conn.sendTrack) conn.sendTrack.enabled = this.shouldSendTo(this.peers.find((peer) => peer.id === peerId));
+      const peer = this.peers.find((entry) => entry.id === peerId);
+      const viaChannel = this.channelFast(peer, conn);
+      if (conn.sendTrack) conn.sendTrack.enabled = !viaChannel && this.shouldSendTo(peer);
+      if (viaChannel) {
+        const target = this.fast.channelTarget(peerId, conn.dc);
+        reachable.push(target);
+        if (this.shouldSendTo(peer)) heard.push(target);
+      }
     }
     if (this.fast) {
-      const apps = this.peers.filter((peer) => peer.kind === "user" && peer.native);
-      this.fast.setTargets(apps.filter((peer) => this.shouldSendTo(peer)).map((peer) => peer.native), apps.map((peer) => peer.native));
+      for (const peer of this.peers) {
+        if (!this.usesFast(peer)) continue;
+        const target = this.fast.udpTarget(peer.native);
+        reachable.push(target);
+        if (this.shouldSendTo(peer)) heard.push(target);
+      }
+      this.fast.setTargets(heard, reachable);
     }
   }
 
-  // Two desktop apps talk over fast comms instead of WebRTC.
+  // Two desktop apps talk over fast comms (UDP) instead of WebRTC.
   usesFast(peer) {
-    return Boolean(this.fast && peer?.kind === "user" && peer.native);
+    return Boolean(this.fast?.native && peer?.kind === "user" && peer.native);
+  }
+
+  // Two browsers (or a browser and an app) with fast comms use the connection's data channel.
+  channelFast(peer, conn) {
+    return Boolean(this.fast && peer?.kind === "user" && peer.fastWeb && conn?.dc?.readyState === "open");
   }
 
   // Who is talking on this channel right now (for the lights next to each channel).
@@ -293,6 +321,21 @@ export class CommsClient {
     this.conns.set(peerId, conn);
     const peer = this.peers.find((entry) => entry.id === peerId);
     conn.feed = this.mode === "feed" || peer?.kind === "feed";
+
+    // Fast comms between browsers: a data channel that never waits to resend a lost packet
+    // (late audio is useless), agreed by both sides up front so it's ready with the connection.
+    if (!conn.feed) {
+      const dc = pc.createDataChannel("voice", { negotiated: true, id: 0, ordered: false, maxRetransmits: 0 });
+      dc.binaryType = "arraybuffer";
+      dc.onmessage = (event) => this.fast?.receive(event.data, this.fast.channelTarget(peerId, dc));
+      dc.onopen = () => {
+        this.updateSending();
+        this.applyGains();
+        this.onChange();
+      };
+      dc.onclose = () => this.updateSending();
+      conn.dc = dc;
+    }
 
     // The device making the offer sets up the audio now; the answering one uses the slot the
     // offer creates (see setupAnswer), so both ends agree on one audio line.
@@ -432,7 +475,9 @@ export class CommsClient {
     const listening = [...this.listen].map((id) => this.volumes[id] ?? 0.9);
     const fallback = listening.length ? Math.max(...listening) : 0.9;
     if (this.fast) {
-      for (const peer of this.peers) if (this.usesFast(peer)) this.fast.setVolume(peer.id, this.levelFor(peer) || fallback);
+      for (const peer of this.peers) {
+        if (this.usesFast(peer) || this.channelFast(peer, this.conns.get(peer.id))) this.fast.setVolume(peer.id, this.levelFor(peer) || fallback);
+      }
     }
     for (const [peerId, conn] of this.conns) {
       if (!conn.element) continue;

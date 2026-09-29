@@ -51,7 +51,8 @@
       "extendInfo": {
         "NSMicrophoneUsageDescription": "QLab Connect uses the microphone for comms (talkback between departments).",
         "NSLocalNetworkUsageDescription": "QLab Connect finds the show computer and sends comms audio on your local network."
-      }
+      },
+      "identity": "-"
     },
     "win": {
       "target": [
