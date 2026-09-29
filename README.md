@@ -609,6 +609,22 @@ How it works: audio goes directly between devices over WebRTC (Opus), not throug
 
 Keep the page open and the screen on: phones stop the microphone when the page is in the background or the screen locks (the page asks the phone to stay awake where it can). Every device connects to every other one, which is fine for a show team (around 15–20 devices).
 
+## Desktop app (Mac and Windows) and fast comms
+
+QLab Connect is also an app for Mac and Windows. It does two jobs, chosen the first time it opens (change it later from the menu: **QLab Connect → Change what this computer does…**):
+
+- **Run the show here**: on the QLab computer (e.g. the Mac mini). It runs the same server as `npm start`, and everyone else joins it as before.
+- **Join a show**: on any other Mac or Windows computer. It finds the show computer on the network (or type its address) and opens the department pages, with **fast comms**.
+
+**Fast comms**: between two computers running the app, voices go straight over the local network as raw 5 ms audio packets (UDP), with a small buffer the app controls (10 ms, growing only if the network hiccups, and capped so delay can't build up). Expect roughly **25–50 ms** mouth to ear, versus 100 ms or more through a browser. The comms panel shows "⚡ Fast comms (app)" with the measured delay. Phones and browsers still join comms as before; app ↔ phone calls use the browser route.
+
+**Downloads**: every push builds the app on GitHub (Actions → *Desktop app* → the latest run → *Artifacts*): `QLab-Connect-mac` (a `.dmg` for Apple Silicon `arm64` and Intel `x64`) and `QLab-Connect-windows` (an installer `.exe`). Pushing a tag like `v1.0.0` also puts them on a GitHub Release. To build yourself: `npm run dist:mac` on a Mac, `npm run dist:win` on Windows.
+
+The app isn't signed with an Apple or Microsoft developer certificate, so the first time:
+
+- **Mac**: right-click the app → **Open** → **Open** (or System Settings → Privacy & Security → *Open Anyway*). Allow the microphone and "local network" when asked.
+- **Windows**: SmartScreen may say "Windows protected your PC": **More info → Run anyway**. When the firewall asks, allow it on **private networks** (fast comms and finding the show computer need it).
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

@@ -4203,3 +4203,7 @@ body:has(.comms-dock:not([hidden])) .shell {
   font-size: 0.85rem;
   font-weight: 600;
 }
+
+#commsButton {
+  white-space: nowrap;
+}

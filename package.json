@@ -9,18 +9,20 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "electron": "electron .",
-    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
-    "check": "node --check server.js && for f in src/*.js public/*.js electron/*.js; do node --check \"$f\"; done",
+    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",
+    "check": "node --check server.js && for f in src/*.js public/*.js electron/*.js electron/*.cjs; do node --check \"$f\"; done",
     "mac:install": "bash scripts/mac-service.sh install",
     "mac:restart": "bash scripts/mac-service.sh restart",
     "mac:status": "bash scripts/mac-service.sh status",
     "mac:logs": "bash scripts/mac-service.sh logs",
-    "mac:uninstall": "bash scripts/mac-service.sh uninstall"
+    "mac:uninstall": "bash scripts/mac-service.sh uninstall",
+    "dist:win": "electron-builder --win --publish never"
   },
   "main": "electron/main.js",
   "build": {
     "appId": "com.tds.qlabconnect",
     "productName": "QLab Connect",
+    "artifactName": "QLab-Connect-${version}-${os}-${arch}.${ext}",
     "files": [
       "electron/**/*",
       "public/**/*",
@@ -31,9 +33,40 @@
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "QLab Connect uses the microphone for comms (talkback between departments).",
+        "NSLocalNetworkUsageDescription": "QLab Connect finds the show computer and sends comms audio on your local network."
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "QLab-Connect-Setup-${version}.${ext}"
     }
   },
   "engines": {

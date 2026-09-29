@@ -6,6 +6,8 @@
 
 // No DTX (silence suppression): with it, a quiet line sends a packet every ~400 ms, the receiver
 // takes the gaps for a bad network and grows its buffer, adding hundreds of ms to every voice.
+import { FastAudio, nativeAvailable } from "/fast-audio.js";
+
 const VOICE_FMTP = "useinbandfec=1;usedtx=0;minptime=10";
 const FEED_FMTP = "stereo=1;sprop-stereo=1;maxaveragebitrate=128000;useinbandfec=1;usedtx=0";
 
@@ -50,7 +52,11 @@ export class CommsClient {
     this.running = true;
     this.error = "";
     this.setStatus("starting");
-    this.audioContext = new AudioContext({ latencyHint: "interactive" });
+    // In the desktop app, ask for the lowest output delay the computer offers, at 48 kHz to match
+    // fast comms packets.
+    this.audioContext = nativeAvailable() && this.mode === "user"
+      ? new AudioContext({ latencyHint: 0, sampleRate: 48000 })
+      : new AudioContext({ latencyHint: "interactive" });
     await this.audioContext.resume().catch(() => {});
     if (this.mode === "user") {
       try {
@@ -72,6 +78,16 @@ export class CommsClient {
         this.error = `No microphone (${error.message}). You can listen, but not talk.`;
       }
     }
+    if (this.mode === "user" && nativeAvailable()) {
+      try {
+        this.fast = new FastAudio({ context: this.audioContext, micStream: this.micStream, myId: this.id });
+        this.nativePort = await this.fast.start();
+      } catch (error) {
+        console.warn("Fast comms not available:", error.message);
+        this.fast = null;
+        this.nativePort = null;
+      }
+    }
     document.addEventListener("visibilitychange", this.onVisibility);
     this.keepAwake();
     this.statsTimer = setInterval(() => this.measureLatency(), 2000);
@@ -87,6 +103,8 @@ export class CommsClient {
     this.ws?.close();
     this.ws = null;
     for (const id of [...this.conns.keys()]) this.dropConn(id);
+    this.fast?.stop();
+    this.fast = null;
     this.micStream?.getTracks().forEach((track) => track.stop());
     this.micStream = null;
     this.micTrack = null;
@@ -132,6 +150,7 @@ export class CommsClient {
   onMessage(message) {
     if (message.type === "welcome") {
       this.id = message.id;
+      this.fast?.setId(message.id);
       this.channels = message.channels || this.channels;
       this.feedName = message.feedName || this.feedName;
       this.setStatus("on");
@@ -154,7 +173,7 @@ export class CommsClient {
   }
 
   sendState() {
-    this.send({ type: "state", listen: [...this.listen], talking: [...this.talking], feed: this.feedOn });
+    this.send({ type: "state", listen: [...this.listen], talking: [...this.talking], feed: this.feedOn, nativePort: this.nativePort || null });
   }
 
   // --- Talk and listen ---
@@ -227,6 +246,15 @@ export class CommsClient {
     for (const [peerId, conn] of this.conns) {
       if (conn.sendTrack) conn.sendTrack.enabled = this.shouldSendTo(this.peers.find((peer) => peer.id === peerId));
     }
+    if (this.fast) {
+      const apps = this.peers.filter((peer) => peer.kind === "user" && peer.native);
+      this.fast.setTargets(apps.filter((peer) => this.shouldSendTo(peer)).map((peer) => peer.native), apps.map((peer) => peer.native));
+    }
+  }
+
+  // Two desktop apps talk over fast comms instead of WebRTC.
+  usesFast(peer) {
+    return Boolean(this.fast && peer?.kind === "user" && peer.native);
   }
 
   // Who is talking on this channel right now (for the lights next to each channel).
@@ -245,7 +273,7 @@ export class CommsClient {
     if (!peer) return false;
     if (this.mode === "feed") return peer.kind === "user" && peer.feed;
     if (peer.kind === "feed") return this.feedOn;
-    return true;
+    return !this.usesFast(peer);
   }
 
   syncConns() {
@@ -403,6 +431,9 @@ export class CommsClient {
   applyGains() {
     const listening = [...this.listen].map((id) => this.volumes[id] ?? 0.9);
     const fallback = listening.length ? Math.max(...listening) : 0.9;
+    if (this.fast) {
+      for (const peer of this.peers) if (this.usesFast(peer)) this.fast.setVolume(peer.id, this.levelFor(peer) || fallback);
+    }
     for (const [peerId, conn] of this.conns) {
       if (!conn.element) continue;
       const peer = this.peers.find((entry) => entry.id === peerId);
@@ -438,6 +469,14 @@ export class CommsClient {
   // (not since joining, so an early rough patch doesn't stick): half the network round trip, the
   // receive buffer right now, and the devices (recording, one Opus frame, playing).
   async measureLatency() {
+    // Fast comms (desktop app to desktop app) measures itself.
+    const fastParts = this.fast?.latencyParts();
+    if (fastParts) {
+      this.latencyParts = { ...fastParts, fast: true };
+      this.latencyMs = fastParts.network + fastParts.buffer + fastParts.device;
+      this.onChange();
+      return;
+    }
     const parts = [];
     for (const conn of this.conns.values()) {
       if (conn.pc.connectionState !== "connected" || conn.feed) continue;

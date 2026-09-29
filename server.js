@@ -5,6 +5,7 @@ import { keepConnected } from "./src/qlab.js";
 import { getSettings } from "./src/settings.js";
 import { attachMidiSocket, initMidiOutput } from "./src/midi-out.js";
 import { attachCommsSocket } from "./src/comms.js";
+import { startDiscovery } from "./src/discovery.js";
 import { startRtpMidi } from "./src/rtp-midi.js";
 import { loadTlsCredentials } from "./src/tls.js";
 
@@ -14,6 +15,7 @@ export function startServer() {
   attachCommsSocket(server);
   initMidiOutput();
   startRtpMidi();
+  startDiscovery();
 
   server.listen(HTTP_PORT, () => {
     console.log(`QLab Screen is running at http://localhost:${HTTP_PORT}`);

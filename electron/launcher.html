@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+    <title>QLab Connect</title>
+    <style>
+      :root { color-scheme: dark; --bg: #0a0a0b; --panel: #151518; --line: #2a2a30; --text: #f4f4f5; --muted: #a1a1aa; --accent: #4ade80; --warn: #fbbf24; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif; }
+      main { width: min(720px, calc(100vw - 32px)); display: grid; gap: 16px; }
+      h1 { margin: 0; font-size: 1.6rem; }
+      p { margin: 0; color: var(--muted); }
+      .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .card { display: grid; gap: 10px; align-content: start; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+      .card h2 { margin: 0; font-size: 1.1rem; }
+      button { height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--accent); color: #04130a; font: inherit; font-weight: 800; cursor: pointer; }
+      button.secondary { border: 1px solid var(--line); background: transparent; color: var(--text); }
+      input { height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #050505; color: var(--text); font: inherit; }
+      .servers { display: grid; gap: 8px; }
+      .server { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+      .server small { color: var(--muted); }
+      .row { display: flex; gap: 8px; }
+      .row input { flex: 1; }
+      #message { color: var(--warn); min-height: 1.2em; }
+      @media (max-width: 620px) { .choices { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>QLab Connect</h1>
+        <p>Choose what this computer does. You can change it later from the QLab Connect menu.</p>
+      </div>
+      <div class="choices">
+        <section class="card">
+          <h2>Run the show here</h2>
+          <p>This is the computer with QLab (e.g. the Mac mini). It hosts the website everyone else joins.</p>
+          <button id="serverButton" type="button">Run the show here</button>
+        </section>
+        <section class="card">
+          <h2>Join a show</h2>
+          <p>Use this computer as a department screen with fast comms. Pick the show computer:</p>
+          <div id="servers" class="servers"><p>Looking on the network…</p></div>
+          <button id="searchButton" type="button" class="secondary">Search again</button>
+          <div class="row">
+            <input id="address" placeholder="Or type its address, e.g. 192.168.1.20" autocomplete="off">
+            <button id="joinButton" type="button">Join</button>
+          </div>
+        </section>
+      </div>
+      <p id="message"></p>
+    </main>
+    <script src="launcher.js"></script>
+  </body>
+</html>

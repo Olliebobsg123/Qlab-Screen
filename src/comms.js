@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import { WebSocketServer } from "ws";
 import { getSettings } from "./settings.js";
 
@@ -59,11 +60,24 @@ export function attachCommsSocket(server) {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(request, socket, head, (ws) => join(ws, ticket));
+    wss.handleUpgrade(request, socket, head, (ws) => join(ws, ticket, reachableAddress(request.socket.remoteAddress)));
   });
 }
 
-function join(ws, ticket) {
+// The address other devices can send fast-comms audio to. A device on this computer connects from
+// 127.0.0.1, which means nothing to anyone else, so use this computer's network address instead.
+function reachableAddress(address) {
+  const ip = String(address || "").replace(/^::ffff:/, "");
+  if (ip !== "127.0.0.1" && ip !== "::1") return ip;
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family === "IPv4" && !entry.internal) return entry.address;
+    }
+  }
+  return "127.0.0.1";
+}
+
+function join(ws, ticket, ip) {
   const peer = {
     ws,
     id: `p${nextId++}`,
@@ -75,6 +89,9 @@ function join(ws, ticket) {
     listen: [],
     talking: [],
     feed: false,
+    // The desktop app's fast comms: where to send it audio directly (UDP), or null in a browser.
+    native: null,
+    ip,
     alive: true
   };
   peers.set(peer.id, peer);
@@ -94,6 +111,8 @@ function join(ws, ticket) {
       peer.talking = (Array.isArray(message.talking) ? message.talking : [])
         .filter((id) => channelIds.has(id) || (id === "*" && peer.allTalk)).slice(0, 16);
       peer.feed = Boolean(message.feed);
+      const port = Number(message.nativePort);
+      peer.native = Number.isInteger(port) && port > 0 && port < 65536 ? { ip: peer.ip, port } : null;
       broadcastPeers();
     } else if (message.type === "signal") {
       // Pass offers, answers and ICE candidates between two devices.
@@ -119,7 +138,8 @@ function publicPeer(peer) {
     color: peer.color,
     listen: peer.listen,
     talking: peer.talking,
-    feed: peer.feed
+    feed: peer.feed,
+    native: peer.native
   };
 }
 
