@@ -131,6 +131,7 @@ function normalizeSettings(saved) {
     // departments on one computer). Normally a login is shared by the whole browser.
     testingMode: Boolean(saved.testingMode),
     lightingDesk: normalizeLightingDesk(saved.lightingDesk),
+    comms: normalizeComms(saved.comms),
     departments: Array.isArray(saved.departments) ? saved.departments.map(normalizeDepartment).filter(Boolean).slice(0, 24) : [],
     // Signs department login cookies; kept so a server restart doesn't log everyone out.
     sessionSecret: String(saved.sessionSecret || "") || randomBytes(32).toString("hex"),
@@ -172,6 +173,27 @@ function normalizeDepartment(saved) {
     pageTargets: list(saved.pageTargets).slice(0, 40).map((target) => target.slice(0, 40)),
     passwordHash: String(saved.passwordHash || ""),
     passwordSalt: String(saved.passwordSalt || "")
+  };
+}
+
+// Comms (src/comms.js): talkback channels between departments, plus an optional show feed.
+function normalizeComms(saved) {
+  const comms = saved && typeof saved === "object" ? saved : {};
+  const seen = new Set();
+  const channels = (Array.isArray(comms.channels) ? comms.channels : [{ name: "Main" }])
+    .map((channel) => String(typeof channel === "string" ? channel : channel?.name || "").trim().slice(0, 24))
+    .filter(Boolean)
+    .map((name) => {
+      let id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "channel";
+      while (seen.has(id)) id += "-2";
+      seen.add(id);
+      return { id, name };
+    })
+    .slice(0, 8);
+  return {
+    enabled: Boolean(comms.enabled),
+    channels: channels.length ? channels : [{ id: "main", name: "Main" }],
+    feedName: String(comms.feedName || "Show feed").trim().slice(0, 30) || "Show feed"
   };
 }
 

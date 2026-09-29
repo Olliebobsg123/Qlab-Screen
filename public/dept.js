@@ -12,6 +12,7 @@ import {
   subscribeState,
   tabLogin
 } from "/shared.js";
+import { setupComms } from "/dept-comms.js";
 
 const $ = (selector) => document.querySelector(selector);
 const params = new URLSearchParams(window.location.search);
@@ -68,6 +69,7 @@ setupButtons();
 setupCuePanel();
 setupStandbys();
 setupPresence();
+setupComms({ fetchComms: () => deptFetch(withQuery("/api/dept/comms"), { cache: "no-store" }).then((response) => response.json()) });
 setupKeyboard();
 
 // Fetch which cues this department owns. The list changes whenever cues are added, deleted or

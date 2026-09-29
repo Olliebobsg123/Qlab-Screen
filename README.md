@@ -591,6 +591,22 @@ The **Report** page then shows:
 
 Up to 80 performances are kept, in `performances.json` next to the settings file.
 
+## Comms (talkback over the network)
+
+Headset-style talkback between departments, in the browser: no beltpacks, just phones or laptops with headphones.
+
+1. **Admin → Comms**: tick *Turn on comms* and name your channels (e.g. `Main, Sound, Lighting, Stage`).
+2. Everyone opens their department page on the **secure address** (`https://<mac-ip>:3443/dept.html`). Browsers only allow microphones on secure pages; the plain address shows an "Open secure page" button. The first time, the phone warns about the self-signed certificate: accept it.
+3. Tap **🎧 Comms**, put headphones on, **Join comms**.
+4. The bar at the bottom has a big **TALK** button for your main channel. **Channels** opens every channel: tick the ones to listen to, set each one's volume, and use its own TALK. **Hold** TALK to talk, or **double-tap** to stay on (tap again to stop). The Stage Manager also has **TALK ALL**.
+5. Who's talking shows next to each channel; the pill on the left shows the measured delay (e.g. "≈55 ms").
+
+**Show feed**: on the QLab Mac, open **Admin → Comms → Send the show feed…** (on the secure address or `localhost`), pick the input carrying the show mix (e.g. a BlackHole loopback that QLab outputs to, or an interface fed from the desk) and press **Start sending**. Anyone on comms can tick **Show feed** to hear it, with its own volume. It's sent in stereo at higher quality, without the voice processing.
+
+How it works: audio goes directly between devices over WebRTC (Opus), not through the server; the server only introduces devices and shares who's talking where. Each device only plays voices on channels it listens to, and your mic only sends while TALK is held. Delay is typically 40–100 ms end to end on a good network: fine for calling cues and chatting, like a phone call but quicker. It's not meant for musicians' in-ear monitoring. Wired computers and a good 5 GHz Wi-Fi network help most.
+
+Keep the page open and the screen on: phones stop the microphone when the page is in the background or the screen locks (the page asks the phone to stay awake where it can). Every device connects to every other one, which is fine for a show team (around 15–20 devices).
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

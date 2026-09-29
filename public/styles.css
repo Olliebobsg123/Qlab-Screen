@@ -3528,7 +3528,7 @@ body.focus-mode .topbar {
   /* Row 1: name, Log out, Menu. Row 2: status chips. Row 3: the page menu when open. */
   .dept-shell .topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     gap: 6px;
     align-items: center;
   }
@@ -3538,10 +3538,12 @@ body.focus-mode .topbar {
   }
 
   .dept-shell .topbar-title { grid-area: 1 / 1; }
-  .dept-shell #logoutButton { grid-area: 1 / 2; }
-  .dept-shell #menuButton { grid-area: 1 / 3; }
-  .dept-shell .status-chips { grid-area: 2 / 1 / 3 / 4; }
-  .dept-shell .topnav { grid-area: 3 / 1 / 4 / 4; }
+  .dept-shell #commsButton { grid-area: 1 / 2; }
+  .dept-shell #logoutButton { grid-area: 1 / 3; }
+  .dept-shell #menuButton { grid-area: 1 / 4; }
+  .dept-shell #commsButton .button-text { display: none; }
+  .dept-shell .status-chips { grid-area: 2 / 1 / 3 / 5; }
+  .dept-shell .topnav { grid-area: 3 / 1 / 4 / 5; }
 
   .dept-shell .show-standby .go-next,
   .dept-shell .go-next {
@@ -3996,4 +3998,193 @@ body.focus-mode .topbar {
 
 #perfCuesBox {
   margin-top: 14px;
+}
+
+/* --- Comms dock (department pages) --- */
+
+.comms-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  display: grid;
+  gap: 8px;
+  max-height: 70vh;
+  padding: 10px max(12px, calc((100vw - 1440px) / 2)) calc(10px + env(safe-area-inset-bottom));
+  overflow: auto;
+  border-top: 2px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.5);
+}
+
+body:has(.comms-dock:not([hidden])) .shell {
+  padding-bottom: 110px;
+}
+
+.comms-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.comms-note,
+.comms-who {
+  flex: 1 1 160px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.comms-who {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-state {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.comms-state[data-state="on"] {
+  background: var(--running-soft);
+  color: var(--running);
+}
+
+.comms-mic-level {
+  width: 10px;
+  height: 28px;
+  border-radius: 4px;
+  background: linear-gradient(to top, var(--running) calc(var(--level, 0) * 100%), var(--panel-strong) 0);
+}
+
+.comms-talk {
+  min-width: 150px;
+  height: 56px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 900;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.comms-talk.small {
+  min-width: 90px;
+  height: 44px;
+  font-size: 0.9rem;
+}
+
+.comms-talk.talking {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.comms-talk.latched {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.comms-talk:disabled {
+  opacity: 0.4;
+}
+
+.comms-body {
+  display: grid;
+  gap: 6px;
+}
+
+.comms-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(0, 1.5fr) minmax(80px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.comms-row.active {
+  border-color: var(--running);
+  background: var(--running-soft);
+}
+
+.comms-listen {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.comms-listen span {
+  color: var(--text);
+}
+
+.comms-listen input {
+  width: 20px;
+  height: 20px;
+}
+
+.comms-talkers {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-error:empty {
+  display: none;
+}
+
+.comms-error {
+  margin: 0;
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+
+.comms-help {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .comms-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .comms-row input[type="range"],
+  .comms-row .comms-talkers {
+    grid-column: 1 / -1;
+  }
+
+  .comms-talk {
+    flex: 1 1 140px;
+  }
+}
+
+.feed-status {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.feed-level {
+  width: 14px;
+  height: 36px;
 }

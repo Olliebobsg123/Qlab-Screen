@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Show Feed Sender</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell admin-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">Comms</span>
+          <h1>Show feed sender</h1>
+        </div>
+        <nav class="topnav" aria-label="Pages" data-nav></nav>
+      </header>
+
+      <p id="feedNotice" class="notice" hidden></p>
+
+      <section class="panel admin-panel">
+        <p class="help-text">
+          Sends one audio input to everyone on comms who turns on the show feed. Open this on the QLab Mac with a
+          loopback device (e.g. BlackHole, with QLab's output sent to it) or on any computer fed from the sound desk.
+          Keep this tab open, and the computer awake, during the show.
+        </p>
+        <form id="feedForm" class="admin-form">
+          <label>
+            <span>Audio input</span>
+            <select id="feedInput"><option value="">Default input</option></select>
+          </label>
+          <div class="form-actions">
+            <button id="feedStart" type="submit">Start sending</button>
+            <button id="feedStop" type="button" class="secondary" disabled>Stop</button>
+          </div>
+        </form>
+        <div class="feed-status">
+          <span id="feedLevel" class="comms-mic-level feed-level"></span>
+          <strong id="feedState">Not sending</strong>
+          <span id="feedListeners" class="quiet"></span>
+        </div>
+      </section>
+    </main>
+    <script src="/nav.js" defer></script>
+    <script src="/comms-feed.js" type="module"></script>
+  </body>
+</html>

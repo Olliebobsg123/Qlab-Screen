@@ -66,7 +66,8 @@ export function attachMidiSocket(server) {
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url, "http://localhost");
     if (url.pathname !== WS_PATH) {
-      socket.destroy();
+      // /comms is handled by src/comms.js on the same server.
+      if (url.pathname !== "/comms") socket.destroy();
       return;
     }
     if (!hasSocketAuth(request, url)) {

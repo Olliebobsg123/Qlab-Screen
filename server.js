@@ -4,12 +4,14 @@ import { networkUrls } from "./src/network.js";
 import { keepConnected } from "./src/qlab.js";
 import { getSettings } from "./src/settings.js";
 import { attachMidiSocket, initMidiOutput } from "./src/midi-out.js";
+import { attachCommsSocket } from "./src/comms.js";
 import { startRtpMidi } from "./src/rtp-midi.js";
 import { loadTlsCredentials } from "./src/tls.js";
 
 export function startServer() {
   const server = createHttpServer();
   attachMidiSocket(server);
+  attachCommsSocket(server);
   initMidiOutput();
   startRtpMidi();
 
@@ -35,6 +37,7 @@ async function startHttpsServer() {
     const credentials = await loadTlsCredentials();
     const httpsServer = createHttpsServer(credentials);
     attachMidiSocket(httpsServer);
+    attachCommsSocket(httpsServer);
     await new Promise((resolve, reject) => {
       httpsServer.once("error", reject);
       httpsServer.listen(HTTPS_PORT, resolve);

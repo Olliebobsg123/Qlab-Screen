@@ -5,6 +5,7 @@ const ADMIN_PAGES = new Set([
   "/admin.html",
   "/admin.js",
   "/viewers.html",
+  "/comms-feed.html",
   "/viewers.js",
   "/control.html",
   "/midi.html",

@@ -770,3 +770,53 @@ document.querySelector("#deskTestButton").addEventListener("click", async () => 
     : data.error || "Could not send.";
   loadDesk();
 });
+
+
+// --- Comms ---
+
+const commsForm = document.querySelector("#commsForm");
+
+loadComms(true);
+setInterval(() => {
+  if (!document.querySelector("#tab-comms").hidden && !document.hidden) loadComms(false);
+}, 3000);
+
+async function loadComms(fillForm) {
+  const comms = await fetch("/api/admin/comms", { cache: "no-store" }).then((response) => response.json()).catch(() => null);
+  if (!comms) return;
+  if (fillForm) {
+    commsForm.elements.enabled.checked = comms.enabled;
+    commsForm.elements.channels.value = comms.channels.map((channel) => channel.name).join(", ");
+    commsForm.elements.feedName.value = comms.feedName;
+    if (comms.httpsPort && location.protocol !== "https:") {
+      document.querySelector("#commsFeedLink").href = `https://${location.hostname}:${comms.httpsPort}/comms-feed.html`;
+    }
+  }
+  document.querySelector("#commsState").textContent = comms.enabled ? `On · ${comms.people.length} connected` : "Off";
+  const channelName = (id) => id === "*" ? "all channels" : comms.channels.find((channel) => channel.id === id)?.name || id;
+  document.querySelector("#commsPeople").innerHTML = comms.people.length
+    ? comms.people.map((person) => `
+      <div class="desk-entry">
+        <strong>${escapeText(person.name)}${person.kind === "feed" ? " (sending the show feed)" : ""}</strong>
+        ${person.kind === "user" ? `<span class="quiet">Listening: ${escapeText(person.listen.map(channelName).join(", ") || "nothing")}${person.feed ? " + show feed" : ""}</span>` : ""}
+        ${person.talking.length ? `<span class="desk-output-result" data-output="changed">🔊 Talking on ${escapeText(person.talking.map(channelName).join(", "))}</span>` : ""}
+      </div>`).join("")
+    : "Nobody yet.";
+}
+
+commsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const response = await fetch("/api/admin/comms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      enabled: commsForm.elements.enabled.checked,
+      channels: commsForm.elements.channels.value.split(",").map((name) => name.trim()).filter(Boolean),
+      feedName: commsForm.elements.feedName.value
+    })
+  });
+  document.querySelector("#commsMessage").textContent = response.ok
+    ? "Saved. Department pages pick this up when they're reloaded."
+    : "Could not save.";
+  loadComms(true);
+});

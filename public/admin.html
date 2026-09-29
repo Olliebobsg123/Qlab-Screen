@@ -27,6 +27,7 @@
         <button type="button" role="tab" class="tab" data-tab="departments">Departments</button>
         <button type="button" role="tab" class="tab" data-tab="control">Control &amp; API</button>
         <button type="button" role="tab" class="tab" data-tab="desk">Lighting desk</button>
+        <button type="button" role="tab" class="tab" data-tab="comms">Comms</button>
         <button type="button" role="tab" class="tab" data-tab="share">Share</button>
         <button type="button" role="tab" class="tab" data-tab="backup">Backup</button>
         <button type="button" role="tab" class="tab" data-tab="server">Server</button>
@@ -222,6 +223,40 @@
             Every GO sent is in the show report.
           </p>
         </details>
+      </section>
+
+      <section id="tab-comms" class="panel admin-panel tab-panel" role="tabpanel" hidden>
+        <div class="panel-head bare">
+          <h2>Comms (talkback)</h2>
+          <span id="commsState">Off</span>
+        </div>
+        <p class="help-text">
+          Headset-style talkback between departments, in the browser. Everyone on a department page gets a
+          <strong>🎧 Comms</strong> button: pick the channels to listen to, hold <strong>TALK</strong> to talk.
+          Audio goes straight between devices, typically 40–100 ms end to end on a good network.
+          It needs the secure (https) address, headphones, and the screen kept on.
+        </p>
+        <form id="commsForm" class="admin-form">
+          <label class="toggle-row">
+            <input name="enabled" type="checkbox">
+            <span>Turn on comms</span>
+          </label>
+          <label>
+            <span>Channels (comma separated, up to 8)</span>
+            <input name="channels" placeholder="Main, Sound, Lighting, Stage">
+          </label>
+          <label>
+            <span>Show feed name</span>
+            <input name="feedName" maxlength="30" placeholder="Show feed">
+          </label>
+          <div class="form-actions">
+            <button type="submit">Save</button>
+            <a class="tool-button" id="commsFeedLink" href="/comms-feed.html">Send the show feed…</a>
+          </div>
+        </form>
+        <p id="commsMessage" class="form-message" aria-live="polite"></p>
+        <h3 class="subhead">On comms now</h3>
+        <div id="commsPeople" class="desk-recent quiet">Nobody yet.</div>
       </section>
 
       <section id="tab-share" class="panel admin-panel tab-panel" role="tabpanel" hidden>

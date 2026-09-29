@@ -9,6 +9,7 @@ import { sendJson, readBody, serveStatic } from "./http-utils.js";
 import { deskStatus, restartDeskLink, sendDeskGo } from "./lighting-desk.js";
 import { outputLevels } from "./desk-output.js";
 import { checkIn } from "./presence.js";
+import { commsStatus, commsTicket } from "./comms.js";
 import { deletePerformance, listPerformances, updatePerformance } from "./performances.js";
 import { runPreshowCheck, runPreshowFix } from "./preshow.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
@@ -125,7 +126,7 @@ async function routeRequest(request, response) {
   }
 
   if (url.pathname === "/api/departments" && request.method === "GET") {
-    return sendJson(response, { departments: loginDepartments(), testingMode: getSettings().testingMode });
+    return sendJson(response, { departments: loginDepartments(), testingMode: getSettings().testingMode, httpsPort: HTTPS_PORT });
   }
 
   // Which cues each department owns, for the monitor/TV department filter (read-only).
@@ -168,6 +169,25 @@ async function routeRequest(request, response) {
     if (url.pathname === "/api/dept/cue" && request.method === "GET") {
       return sendJson(response, await departmentCueInfo(department, url.searchParams.get("cueId")));
     }
+    if (url.pathname === "/api/dept/comms" && request.method === "GET") {
+      const comms = getSettings().comms;
+      if (!comms.enabled) return sendJson(response, { enabled: false, httpsPort: HTTPS_PORT });
+      return sendJson(response, {
+        enabled: true,
+        httpsPort: HTTPS_PORT,
+        channels: comms.channels,
+        feedName: comms.feedName,
+        allTalk: department.role === "stageManager",
+        ticket: commsTicket({
+          kind: "user",
+          name: department.name,
+          deptId: department.id,
+          color: department.color,
+          // The stage manager can talk to every channel at once.
+          allTalk: department.role === "stageManager"
+        })
+      });
+    }
     if (url.pathname === "/api/dept/presence" && request.method === "POST") {
       // The admin looking at a department's page doesn't make that department "online".
       if (!url.searchParams.get("dept")) checkIn(department.id, await readBody(request));
@@ -192,6 +212,30 @@ async function routeRequest(request, response) {
       runningAsService: process.env.QLAB_CONNECT_SERVICE === "1",
       testingMode: getSettings().testingMode
     });
+  }
+
+  if (url.pathname === "/api/admin/comms" && request.method === "GET") {
+    return sendJson(response, { ...commsStatus(), httpsPort: HTTPS_PORT });
+  }
+
+  if (url.pathname === "/api/admin/comms" && request.method === "POST") {
+    const body = await readBody(request);
+    const current = getSettings().comms;
+    await updateSettings({
+      ...getSettings(),
+      comms: {
+        enabled: body.enabled ?? current.enabled,
+        channels: body.channels ?? current.channels,
+        feedName: body.feedName ?? current.feedName
+      }
+    });
+    return sendJson(response, { ok: true, ...commsStatus() });
+  }
+
+  if (url.pathname === "/api/admin/comms/ticket" && request.method === "GET") {
+    const comms = getSettings().comms;
+    if (!comms.enabled) return sendJson(response, { error: "Turn on comms first (Admin → Comms)." }, 409);
+    return sendJson(response, { ticket: commsTicket({ kind: "feed", name: comms.feedName }), channels: comms.channels, feedName: comms.feedName });
   }
 
   if (url.pathname === "/api/admin/lighting-desk" && request.method === "GET") {

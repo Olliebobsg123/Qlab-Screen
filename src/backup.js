@@ -32,6 +32,7 @@ export function exportSetup({ includeSecrets }) {
         networkMidiAuto: settings.control.networkMidiAuto
       },
       lightingDesk: settings.lightingDesk,
+      comms: settings.comms,
       departments: settings.departments.map((department) => ({
         ...department,
         passwordHash: secret(department.passwordHash),
@@ -56,7 +57,7 @@ export async function importSetup(backup) {
     throw error;
   }
   const current = getSettings();
-  const { qlab = {}, control = {}, departments, server = {}, lightingDesk } = backup.setup;
+  const { qlab = {}, control = {}, departments, server = {}, lightingDesk, comms } = backup.setup;
   const pick = (value, fallback) => (value === undefined || value === null ? fallback : value);
   const currentDepartments = new Map(current.departments.map((department) => [department.id, department]));
 
@@ -75,6 +76,7 @@ export async function importSetup(backup) {
       networkMidiAuto: pick(control.networkMidiAuto, current.control.networkMidiAuto)
     },
     lightingDesk: lightingDesk && typeof lightingDesk === "object" ? { ...current.lightingDesk, ...lightingDesk } : current.lightingDesk,
+    comms: comms && typeof comms === "object" ? { ...current.comms, ...comms } : current.comms,
     departments: Array.isArray(departments)
       ? departments.map((department) => ({
         ...department,
