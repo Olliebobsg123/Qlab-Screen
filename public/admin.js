@@ -234,7 +234,10 @@ async function saveSecure() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
-  }).then((response) => response.json()).catch(() => ({ error: "Could not save." }));
+  }).then(async (response) => {
+    if (response.status === 404) return { error: "QLab Connect needs restarting to use this (it's still running the old version). Restart it, then reload this page." };
+    return response.json();
+  }).catch(() => ({ error: "Could not save: is QLab Connect still running?" }));
   if (result.error) {
     secureMessage.textContent = result.error;
     return false;
