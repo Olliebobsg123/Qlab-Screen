@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import dgram from "node:dgram";
 import dns from "node:dns";
 import { addressFor, lanAddresses } from "./network.js";
@@ -15,7 +16,9 @@ const TYPE_A = 1;
 let socket = null;
 let upstream = null;
 let answeredName = "";
-let status = { running: false, error: "", answered: 0, forwarded: 0, lastClient: "" };
+let status = { running: false, error: "", answered: 0, forwarded: 0, lastClient: "", upstream: "", upstreamOk: null, failed: 0 };
+let gateway = "";
+let checkTimer = null;
 const pending = new Map(); // forwarded id -> { id, address, port, timer }
 let nextId = 1;
 
@@ -41,6 +44,38 @@ export function configureDnsServer(name) {
   upstream.on("message", onUpstreamReply);
   upstream.on("error", () => {});
   upstream.bind(0);
+  findGateway();
+  clearInterval(checkTimer);
+  checkTimer = setInterval(checkUpstream, 60000);
+  checkTimer.unref();
+  setTimeout(checkUpstream, 1500).unref();
+}
+
+// The router's address, which always answers lookups on its own network.
+function findGateway() {
+  const done = (error, stdout) => {
+    const match = !error && String(stdout).match(/gateway:\s*(\d+\.\d+\.\d+\.\d+)|default\s+via\s+(\d+\.\d+\.\d+\.\d+)|0\.0\.0\.0\s+0\.0\.0\.0\s+(\d+\.\d+\.\d+\.\d+)/);
+    gateway = match ? match[1] || match[2] || match[3] : "";
+  };
+  if (process.platform === "darwin") execFile("route", ["-n", "get", "default"], { timeout: 3000 }, done);
+  else if (process.platform === "win32") execFile("route", ["print", "0.0.0.0"], { timeout: 3000 }, done);
+  else execFile("ip", ["route", "show", "default"], { timeout: 3000 }, done);
+}
+
+// Can we reach a real DNS server? (Shown in Admin; "no" usually just means no internet.)
+function checkUpstream() {
+  if (!upstream) return;
+  findGateway();
+  const probe = Buffer.from("abcd01000001000000000000076578616d706c6503636f6d0000010001", "hex");
+  const id = nextId;
+  nextId = nextId >= 0xffff ? 1 : nextId + 1;
+  probe.writeUInt16BE(id, 0);
+  const timer = setTimeout(() => {
+    pending.delete(id);
+    status.upstreamOk = false;
+  }, FORWARD_TIMEOUT_MS);
+  pending.set(id, { probe: true, timer });
+  for (const server of upstreamServers()) upstream.send(probe, 53, server);
 }
 
 function stop() {
@@ -48,6 +83,7 @@ function stop() {
   upstream?.close();
   socket = null;
   upstream = null;
+  clearInterval(checkTimer);
   for (const entry of pending.values()) clearTimeout(entry.timer);
   pending.clear();
   status = { ...status, running: false };
@@ -78,6 +114,7 @@ function forward(message, remote) {
   nextId = nextId >= 0xffff ? 1 : nextId + 1;
   const timer = setTimeout(() => {
     pending.delete(id);
+    status.failed += 1;
     socket?.send(failure(message), remote.port, remote.address);
   }, FORWARD_TIMEOUT_MS);
   pending.set(id, { id: message.readUInt16BE(0), address: remote.address, port: remote.port, timer });
@@ -93,17 +130,22 @@ function onUpstreamReply(message) {
   if (!entry) return;
   pending.delete(message.readUInt16BE(0));
   clearTimeout(entry.timer);
+  status.upstreamOk = true;
+  if (entry.probe) return;
   const copy = Buffer.from(message);
   copy.writeUInt16BE(entry.id, 0);
   socket?.send(copy, entry.port, entry.address);
 }
 
-// This computer's own DNS servers, minus itself (the router may point it back at us).
+// Where other lookups go: this computer's own DNS servers (minus itself: the router may point it
+// back at us), the router, then public ones. Asked all at once; the first answer wins.
 function upstreamServers() {
   const own = new Set(lanAddresses().map((entry) => entry.address));
-  const servers = dns.getServers()
-    .filter((server) => /^\d+\.\d+\.\d+\.\d+$/.test(server) && !server.startsWith("127.") && !own.has(server));
-  return (servers.length ? servers : ["1.1.1.1", "8.8.8.8"]).slice(0, 2);
+  const candidates = [...dns.getServers(), gateway, "1.1.1.1", "8.8.8.8"]
+    .filter((server) => /^\d+\.\d+\.\d+\.\d+$/.test(server || "") && !server.startsWith("127.") && !own.has(server));
+  const list = [...new Set(candidates)].slice(0, 4);
+  status.upstream = list.join(", ");
+  return list;
 }
 
 function readQuestion(message) {

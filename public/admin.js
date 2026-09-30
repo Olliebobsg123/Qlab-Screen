@@ -216,6 +216,7 @@ function renderSecure(info) {
   if (info.enabled && info.dns) {
     const dns = info.dnsServer;
     if (dns.error) lines.push(`⚠ Name server: ${dns.error}`);
+    else if (dns.running && dns.upstreamOk === false) lines.push(`⚠ Name server: can't reach any DNS server for other websites (tried ${dns.upstream || "none"}). Fine with no internet; if this computer has internet, other sites won't load for devices using it.`);
     else if (dns.running) lines.push(dns.answered ? `Name server: answered ${dns.answered} lookup${dns.answered === 1 ? "" : "s"} (last from ${dns.lastClient}).` : "Name server: running. Nobody has asked yet (set the router's DNS server to this computer).");
   }
   if (info.enabled && !info.ready && !info.busy && !info.lastError) lines.push(info.hasToken && info.name ? "Press Get certificate (needs internet)." : "Fill in the DuckDNS name and token.");
