@@ -73,19 +73,6 @@ export function createHttpsServer(credentials) {
   }, handleRequest);
 }
 
-// Once the secure address works, browsers opening a page any other way (http://, or an IP
-// address) are sent to it. API calls and this computer's own screens are left alone.
-function secureRedirect(request, url) {
-  const origin = secureOrigin();
-  if (!origin || (request.method !== "GET" && request.method !== "HEAD")) return "";
-  if (!String(request.headers.accept || "").includes("text/html")) return "";
-  if (url.pathname.startsWith("/api/")) return "";
-  const remote = request.socket.remoteAddress || "";
-  if (remote === "::1" || remote.startsWith("127.") || remote.startsWith("::ffff:127.")) return "";
-  const host = String(request.headers.host || "").toLowerCase();
-  if (request.socket.encrypted && `https://${host}` === origin) return "";
-  return `${origin}${url.pathname}${url.search}`;
-}
 
 async function handleRequest(request, response) {
   try {
@@ -104,10 +91,11 @@ async function handleRequest(request, response) {
 async function routeRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
-  const secureUrl = secureRedirect(request, url);
-  if (secureUrl) {
-    response.writeHead(302, { Location: secureUrl, "Cache-Control": "no-store" });
-    return response.end();
+  // The secure address, for pages to move to once they've checked this device can reach it
+  // (public/nav.js). Asked across origins, so it answers anyone.
+  if (url.pathname === "/api/secure-origin" && request.method === "GET") {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    return sendJson(response, { origin: secureOrigin() });
   }
 
   if (isMacOwnerPath(url.pathname) && !hasMacOwnerAccess(request, url)) {

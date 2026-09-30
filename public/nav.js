@@ -50,3 +50,38 @@
     title.prepend(logo);
   }
 })();
+
+// Move to the secure address (e.g. https://frozenjr.duckdns.org, no "not secure" warning) when
+// there is one, but only after checking this device can reach it: on a network whose name
+// servers don't know it, stay on this address rather than land on "site can't be reached".
+(async () => {
+  const host = location.hostname;
+  if (host === "localhost" || host === "127.0.0.1" || new URLSearchParams(location.search).has("stay")) return;
+  const skipKey = "qlabConnect.secureSkip";
+  try {
+    if (sessionStorage.getItem(skipKey) === location.origin) return;
+  } catch {
+    // Storage blocked: just check every time.
+  }
+  try {
+    const { origin } = await fetch("/api/secure-origin", { cache: "no-store" }).then((response) => response.json());
+    if (!origin || origin === location.origin) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const reached = await fetch(`${origin}/api/secure-origin`, { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok).catch(() => false);
+    clearTimeout(timer);
+    if (reached) {
+      location.replace(`${origin}${location.pathname}${location.search}${location.hash}`);
+      return;
+    }
+  } catch {
+    // No secure address, or this device can't reach it.
+  }
+  try {
+    sessionStorage.setItem(skipKey, location.origin);
+  } catch {
+    // Ignore.
+  }
+})();
+

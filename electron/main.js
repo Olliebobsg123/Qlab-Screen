@@ -87,7 +87,8 @@ function trustShowComputer() {
 const redirectedOrigins = new Set();
 
 function trustRedirects(contents) {
-  contents.on("did-redirect-navigation", (event, legacyUrl) => {
+  // Server redirects, and pages moving themselves to the secure address (public/nav.js).
+  const trustTarget = (event, legacyUrl) => {
     const url = event?.url || legacyUrl;
     try {
       const from = contents.getURL();
@@ -96,7 +97,9 @@ function trustRedirects(contents) {
     } catch {
       // Not a URL: ignore.
     }
-  });
+  };
+  contents.on("did-redirect-navigation", trustTarget);
+  contents.on("will-navigate", trustTarget);
 }
 
 function trustedOrigin(url) {

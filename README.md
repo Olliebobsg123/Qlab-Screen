@@ -646,8 +646,8 @@ with a real Let's Encrypt certificate, so phones, Chromebooks and laptops open i
 
 The certificate is proved through DuckDNS (a DNS record), so the internet is needed only to get it and to
 renew it: every couple of months, automatically, whenever the computer is online. The Check page warns two
-weeks before it runs out. Once it works, browsers opening the site by IP address or plain http are sent to
-the secure address (API calls and the show computer's own screens are left alone). QLab Connect also listens
+weeks before it runs out. Once it works, pages opened by IP address or plain http move to the secure address, but only
+after checking that device can reach it; where the network can't find the name, they stay put. QLab Connect also listens
 on the standard ports 443 and 80 when it can, so the address needs no `:3443`.
 
 ## Testing mode
