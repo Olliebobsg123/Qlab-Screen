@@ -269,6 +269,47 @@
           <span>Scan with a phone or tablet on the same network</span>
         </div>
         <div id="networkList" class="network-list">Loading…</div>
+
+        <h3 class="subhead">Secure address <span id="secureState" class="quiet"></span></h3>
+        <p class="help-text">
+          A proper name like <strong>https://qlab-connect.duckdns.org</strong> instead of an IP address, with a real
+          certificate: no “not secure” warning on any phone, Chromebook or laptop. Free. It needs the internet only
+          to set up, and for a minute every couple of months to renew; shows run fine offline.
+        </p>
+        <details class="help-text secure-steps">
+          <summary>How to set it up (5 minutes, once)</summary>
+          <ol>
+            <li>With internet, go to <strong>duckdns.org</strong> and sign in (Google, GitHub…). It's free.</li>
+            <li>Type a name, e.g. <code>qlab-connect</code>, and press <strong>add domain</strong>. If it's taken, try another like <code>frozen-jr-qlab</code>.</li>
+            <li>Copy the <strong>token</strong> from the top of that page, and fill in the boxes below. Press <strong>Get certificate</strong>.</li>
+            <li>For it to work with no internet: in your router's settings, find <strong>DHCP → DNS server</strong> and set it to this computer's address
+              (<span id="secureDnsIp">shown above</span>). Also give this computer a fixed address there (“DHCP reservation”).</li>
+          </ol>
+        </details>
+        <form id="secureForm" class="admin-form">
+          <label class="toggle-row">
+            <input name="enabled" type="checkbox">
+            <span>Use a secure address</span>
+          </label>
+          <label>
+            <span>DuckDNS name</span>
+            <span class="input-suffix"><input name="name" placeholder="qlab-connect" autocomplete="off" spellcheck="false"><span>.duckdns.org</span></span>
+          </label>
+          <label>
+            <span>DuckDNS token</span>
+            <input name="token" type="password" autocomplete="off" placeholder="Paste the token from duckdns.org">
+          </label>
+          <label class="toggle-row">
+            <input name="dns" type="checkbox" checked>
+            <span>Answer the name on this network, so it works without internet</span>
+          </label>
+          <div class="form-actions">
+            <button type="submit">Save</button>
+            <button type="button" id="secureRenew" class="secondary">Get certificate</button>
+          </div>
+        </form>
+        <p id="secureMessage" class="form-message" aria-live="polite"></p>
+
         <h3 class="subhead">More tools</h3>
         <div class="admin-links">
         <a class="tool-button" href="/viewers.html">Live viewers</a>

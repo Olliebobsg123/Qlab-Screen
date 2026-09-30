@@ -14,6 +14,24 @@ export function lanAddresses() {
   return addresses;
 }
 
+// This computer's address on the same network as `clientIp` (a Mac on Ethernet and Wi-Fi has two).
+export function addressFor(clientIp) {
+  const toNumber = (ip) => ip.split(".").reduce((total, part) => total * 256 + Number(part), 0);
+  const client = /^\d+\.\d+\.\d+\.\d+$/.test(clientIp || "") ? toNumber(clientIp) : null;
+  let fallback = "";
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family !== "IPv4" || entry.internal || entry.address.startsWith("169.254.")) continue;
+      fallback ||= entry.address;
+      const mask = toNumber(entry.netmask);
+      if (client !== null && Math.floor(toNumber(entry.address) / (2 ** 32 - mask)) === Math.floor(client / (2 ** 32 - mask))) {
+        return entry.address;
+      }
+    }
+  }
+  return fallback;
+}
+
 export function networkUrls({ httpPort, httpsPort }) {
   return lanAddresses().map(({ interface: name, address }) => ({
     interface: name,

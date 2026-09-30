@@ -132,6 +132,7 @@ function normalizeSettings(saved) {
     testingMode: Boolean(saved.testingMode),
     lightingDesk: normalizeLightingDesk(saved.lightingDesk),
     comms: normalizeComms(saved.comms),
+    secureAddress: normalizeSecureAddress(saved.secureAddress),
     departments: Array.isArray(saved.departments) ? saved.departments.map(normalizeDepartment).filter(Boolean).slice(0, 24) : [],
     // Signs department login cookies; kept so a server restart doesn't log everyone out.
     sessionSecret: String(saved.sessionSecret || "") || randomBytes(32).toString("hex"),
@@ -173,6 +174,19 @@ function normalizeDepartment(saved) {
     pageTargets: list(saved.pageTargets).slice(0, 40).map((target) => target.slice(0, 40)),
     passwordHash: String(saved.passwordHash || ""),
     passwordSalt: String(saved.passwordSalt || "")
+  };
+}
+
+// Secure address (src/secure-address.js): a free DuckDNS name with a real certificate.
+function normalizeSecureAddress(saved) {
+  const value = saved && typeof saved === "object" ? saved : {};
+  const name = String(value.name || "").trim().toLowerCase().replace(/\.duckdns\.org$/, "");
+  return {
+    enabled: Boolean(value.enabled),
+    name: /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name) ? name : "",
+    token: String(value.token || "").trim().slice(0, 64),
+    // Answer the name on the show network, so it works with no internet.
+    dns: value.dns !== false
   };
 }
 

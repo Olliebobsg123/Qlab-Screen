@@ -74,6 +74,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "acme-client": "^5.4.0",
     "compression": "^1.8.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

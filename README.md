@@ -633,6 +633,23 @@ The app isn't signed with an Apple or Microsoft developer certificate, so the fi
 - **Comms**: everyone on comms shows as a chip in their department's colour, lit and pulsing while they're talking to you (dashed while they're talking on a channel you don't listen to). While you talk, a red **ON AIR** bar runs across the top of the screen.
 - Gentle motion when your next cue changes, a cue starts, or the cue panel opens (off if your device is set to reduce motion).
 
+## Secure address (no "not secure" warning)
+
+Admin → Share → Secure address gives the site a proper name, e.g. `https://qlab-connect.duckdns.org`,
+with a real Let's Encrypt certificate, so phones, Chromebooks and laptops open it with no warning. Free.
+
+1. With internet, sign in at [duckdns.org](https://www.duckdns.org), add a name, and copy the token.
+2. Enter the name and token in Admin → Share and press **Get certificate** (takes a minute or two).
+3. So it works with no internet: set the router's **DHCP DNS server** to the show computer's address,
+   and give the show computer a fixed address (DHCP reservation). QLab Connect answers the name itself
+   and passes every other lookup on.
+
+The certificate is proved through DuckDNS (a DNS record), so the internet is needed only to get it and to
+renew it: every couple of months, automatically, whenever the computer is online. The Check page warns two
+weeks before it runs out. Once it works, browsers opening the site by IP address or plain http are sent to
+the secure address (API calls and the show computer's own screens are left alone). QLab Connect also listens
+on the standard ports 443 and 80 when it can, so the address needs no `:3443`.
+
 ## Testing mode
 
 Normally a department login belongs to the whole browser, so logging out in one tab logs out every tab. To try several departments on one device (Sound in one tab, Stage Manager in another), turn on **Admin → Server → Testing mode**. Each tab then logs in on its own, and the login lasts until the tab is closed. Turn it off for shows.

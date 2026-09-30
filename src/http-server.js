@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import tls from "node:tls";
 import { hasAdminAuth, isAdminPath, requestAdminAuth } from "./auth.js";
 import { exportSetup, importSetup } from "./backup.js";
 import { ADMIN_PASSWORD, ADMIN_USER, HTTP_PORT, HTTPS_PORT, QLAB_TCP_PORT, ROOT_DIR, SETTINGS_PATH } from "./config.js";
@@ -10,6 +11,7 @@ import { deskStatus, restartDeskLink, sendDeskGo } from "./lighting-desk.js";
 import { outputLevels } from "./desk-output.js";
 import { checkIn } from "./presence.js";
 import { commsStatus, commsTicket } from "./comms.js";
+import { applySecureSettings, namedCredentials, normalizeSecureName, renewIfDue, secureOrigin, secureStatus } from "./secure-address.js";
 import { deletePerformance, listPerformances, updatePerformance } from "./performances.js";
 import { runPreshowCheck, runPreshowFix } from "./preshow.js";
 import { denyMacOwnerAccess, hasMacOwnerAccess, isMacOwnerPath } from "./mac-owner.js";
@@ -52,8 +54,37 @@ export function createHttpServer() {
   return http.createServer(handleRequest);
 }
 
+// The secure name gets its real certificate; anything else (an IP address) the self-signed one.
 export function createHttpsServer(credentials) {
-  return https.createServer({ cert: credentials.cert, key: credentials.key }, handleRequest);
+  let namedContext = null;
+  let namedFor = null;
+  return https.createServer({
+    cert: credentials.cert,
+    key: credentials.key,
+    SNICallback: (servername, callback) => {
+      const named = namedCredentials();
+      if (!named || String(servername).toLowerCase() !== named.name) return callback(null, null);
+      if (namedFor !== named) {
+        namedContext = tls.createSecureContext({ cert: named.cert, key: named.key });
+        namedFor = named;
+      }
+      callback(null, namedContext);
+    }
+  }, handleRequest);
+}
+
+// Once the secure address works, browsers opening a page any other way (http://, or an IP
+// address) are sent to it. API calls and this computer's own screens are left alone.
+function secureRedirect(request, url) {
+  const origin = secureOrigin();
+  if (!origin || (request.method !== "GET" && request.method !== "HEAD")) return "";
+  if (!String(request.headers.accept || "").includes("text/html")) return "";
+  if (url.pathname.startsWith("/api/")) return "";
+  const remote = request.socket.remoteAddress || "";
+  if (remote === "::1" || remote.startsWith("127.") || remote.startsWith("::ffff:127.")) return "";
+  const host = String(request.headers.host || "").toLowerCase();
+  if (request.socket.encrypted && `https://${host}` === origin) return "";
+  return `${origin}${url.pathname}${url.search}`;
 }
 
 async function handleRequest(request, response) {
@@ -72,6 +103,12 @@ async function handleRequest(request, response) {
 
 async function routeRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
+
+  const secureUrl = secureRedirect(request, url);
+  if (secureUrl) {
+    response.writeHead(302, { Location: secureUrl, "Cache-Control": "no-store" });
+    return response.end();
+  }
 
   if (isMacOwnerPath(url.pathname) && !hasMacOwnerAccess(request, url)) {
     return denyMacOwnerAccess(response);
@@ -303,6 +340,7 @@ async function routeRequest(request, response) {
 
   if (url.pathname === "/api/admin/restore" && request.method === "POST") {
     const { saved, restartRequired } = await importSetup(await readBody(request));
+    applySecureSettings();
     if (saved.autoConnect && saved.host) keepConnected(saved);
     broadcastPatch();
     return sendJson(response, { ok: true, restartRequired });
@@ -368,8 +406,40 @@ async function routeRequest(request, response) {
     return sendJson(response, { network });
   }
 
+  if (url.pathname === "/api/admin/secure-address" && request.method === "GET") {
+    return sendJson(response, secureStatus());
+  }
+
+  if (url.pathname === "/api/admin/secure-address" && request.method === "POST") {
+    const body = await readBody(request);
+    const current = getSettings().secureAddress;
+    const name = body.name === undefined ? current.name : normalizeSecureName(body.name);
+    if (body.name !== undefined && String(body.name).trim() && !name) {
+      return sendJson(response, { error: "Use just the name part, letters, numbers and dashes, e.g. qlab-connect." }, 400);
+    }
+    await updateSettings({
+      ...getSettings(),
+      secureAddress: {
+        enabled: body.enabled ?? current.enabled,
+        name,
+        token: body.token ? String(body.token) : current.token,
+        dns: body.dns ?? current.dns
+      }
+    });
+    applySecureSettings();
+    return sendJson(response, { ok: true, ...secureStatus() });
+  }
+
+  if (url.pathname === "/api/admin/secure-address/renew" && request.method === "POST") {
+    // Runs in the background; the page polls for progress.
+    renewIfDue({ force: true }).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return sendJson(response, secureStatus());
+  }
+
   if (url.pathname === "/api/admin/network" && request.method === "GET") {
     return sendJson(response, {
+      secureUrl: secureOrigin(),
       httpPort: HTTP_PORT,
       httpsPort: HTTPS_PORT,
       urls: networkUrls({ httpPort: HTTP_PORT, httpsPort: HTTPS_PORT })

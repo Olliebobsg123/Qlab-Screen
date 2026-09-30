@@ -3,6 +3,7 @@ import { departmentCueIds, departmentStarts, resetDepartmentStarts } from "./dep
 import { deskCueFor, deskStatus, INSTANT_TYPES } from "./lighting-desk.js";
 import { clearPage, publicPage } from "./paging.js";
 import { presence } from "./presence.js";
+import { secureStatus } from "./secure-address.js";
 import { connectionInfo, queryCueValue } from "./qlab.js";
 import { controlSettings, getSettings, usingDefaultAdminPassword } from "./settings.js";
 import { publicShowState } from "./show.js";
@@ -104,6 +105,16 @@ export async function runPreshowCheck() {
   // Departments come and go (phones sleep, people log in late), so this only needs someone on.
   if (here.length) add(group, "ok", `${names(here)} ${here.length === 1 ? "is" : "are"} logged in`, away.length ? `Not on yet: ${names(away)}.` : "");
   else if (away.length) add(group, "warn", "Nobody is logged in yet", `Departments: ${names(away)}.`);
+
+  // --- Secure address ---
+  const secure = secureStatus();
+  if (secure.enabled) {
+    const days = secure.certificate ? Math.floor((Date.parse(secure.certificate.expiresAt) - Date.now()) / 86400000) : 0;
+    if (!secure.ready) add("Network", "warn", "The secure address isn't working yet", secure.lastError || "", "Admin → Share → Secure address.");
+    else if (days < 14) add("Network", "warn", `The secure address's certificate runs out in ${days} day${days === 1 ? "" : "s"}`, "It renews by itself when this computer has internet.", "Connect to the internet for a minute, then Admin → Share → Get certificate.");
+    else add("Network", "ok", `Secure address: ${secure.url}`, `Certificate good for ${days} more days.`);
+    if (secure.dns && secure.dnsServer.error) add("Network", "warn", "The name server isn't running", secure.dnsServer.error);
+  }
 
   // --- Leftovers from rehearsal ---
   const lights = Object.keys(publicCueLights());

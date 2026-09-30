@@ -82,17 +82,36 @@ function trustShowComputer() {
   });
 }
 
-function allowMicrophone() {
-  const trusted = (url) => {
+// The show computer may send this window on to its secure address (e.g.
+// https://qlab-connect.duckdns.org), which then gets the same trust as the address we opened.
+const redirectedOrigins = new Set();
+
+function trustRedirects(contents) {
+  contents.on("did-redirect-navigation", (event, legacyUrl) => {
+    const url = event?.url || legacyUrl;
     try {
-      const origin = new URL(url).origin;
-      return origin.startsWith("http://127.0.0.1") || origin.startsWith("http://localhost") ||
-        origin.startsWith("https://127.0.0.1") || origin.startsWith("https://localhost") ||
-        (secureUrl && origin === secureUrl);
+      const from = contents.getURL();
+      const target = new URL(url);
+      if (target.protocol === "https:" && (!from || trustedOrigin(from))) redirectedOrigins.add(target.origin);
     } catch {
-      return false;
+      // Not a URL: ignore.
     }
-  };
+  });
+}
+
+function trustedOrigin(url) {
+  try {
+    const origin = new URL(url).origin;
+    return redirectedOrigins.has(origin) || origin.startsWith("http://127.0.0.1") || origin.startsWith("http://localhost") ||
+      origin.startsWith("https://127.0.0.1") || origin.startsWith("https://localhost") ||
+      (secureUrl && origin === secureUrl);
+  } catch {
+    return false;
+  }
+}
+
+function allowMicrophone() {
+  const trusted = trustedOrigin;
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(["media", "audioCapture", "wakeLock", "notifications"].includes(permission) && trusted(details.requestingUrl || webContents.getURL()));
   });
@@ -135,6 +154,7 @@ function showLauncher(message = "") {
 
 async function startClientMode() {
   mainWindow = new BrowserWindow(windowOptions());
+  trustRedirects(mainWindow.webContents);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };

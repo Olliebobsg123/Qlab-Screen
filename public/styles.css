@@ -4516,3 +4516,36 @@ body.on-air-active .comms-talk.talking {
     padding: 0 10px;
   }
 }
+
+/* Secure address (Admin → Share) */
+#secureMessage {
+  white-space: pre-line;
+}
+
+.input-suffix {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-suffix input {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-suffix > span {
+  color: var(--muted, #9ca3af);
+  white-space: nowrap;
+}
+
+.secure-steps summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.secure-steps ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}

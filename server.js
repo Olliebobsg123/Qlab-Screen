@@ -8,6 +8,7 @@ import { attachCommsSocket } from "./src/comms.js";
 import { startDiscovery } from "./src/discovery.js";
 import { startRtpMidi } from "./src/rtp-midi.js";
 import { loadTlsCredentials } from "./src/tls.js";
+import { secureEvents, setSecurePort, startSecureAddress } from "./src/secure-address.js";
 
 export function startServer() {
   const server = createHttpServer();
@@ -20,7 +21,7 @@ export function startServer() {
   server.listen(HTTP_PORT, () => {
     console.log(`QLab Screen is running at http://localhost:${HTTP_PORT}`);
     startHeartbeat();
-    startHttpsServer().finally(printNetworkUrls);
+    startHttpsServer().then(startStandardPorts).finally(printNetworkUrls);
 
     const settings = getSettings();
     if (settings.autoConnect && settings.host) {
@@ -45,9 +46,37 @@ async function startHttpsServer() {
       httpsServer.listen(HTTPS_PORT, resolve);
     });
     console.log(`HTTPS (for MIDI + audio meters) at https://localhost:${HTTPS_PORT}${credentials.selfSigned ? " (self-signed certificate)" : ""}`);
+    setSecurePort(HTTPS_PORT);
+    await startSecureAddress();
+    return credentials;
   } catch (error) {
     console.warn(`HTTPS server not started: ${error.message}`);
+    return null;
   }
+}
+
+// The secure address reads best with no port: https://qlab-connect.duckdns.org. That needs the
+// standard ports (443, plus 80 to send plain http there), which macOS and Windows allow; if
+// they're taken, the address keeps its :port.
+let standardPortsStarted = false;
+function startStandardPorts(credentials) {
+  if (!credentials || standardPortsStarted || HTTPS_PORT === 443) return;
+  standardPortsStarted = true;
+  const tryListen = (server, port) => new Promise((resolve) => {
+    server.once("error", () => resolve(false));
+    server.listen(port, () => resolve(true));
+  });
+  const httpsServer = createHttpsServer(credentials);
+  attachMidiSocket(httpsServer);
+  attachCommsSocket(httpsServer);
+  tryListen(httpsServer, 443).then((ok) => {
+    if (!ok) return;
+    setSecurePort(443);
+    const redirect = createHttpServer();
+    attachCommsSocket(redirect);
+    if (HTTP_PORT !== 80) tryListen(redirect, 80);
+    secureEvents.emit("status");
+  });
 }
 
 function printNetworkUrls() {

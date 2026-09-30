@@ -33,6 +33,7 @@ export function exportSetup({ includeSecrets }) {
       },
       lightingDesk: settings.lightingDesk,
       comms: settings.comms,
+      secureAddress: { ...settings.secureAddress, token: secret(settings.secureAddress.token) },
       departments: settings.departments.map((department) => ({
         ...department,
         passwordHash: secret(department.passwordHash),
@@ -57,7 +58,7 @@ export async function importSetup(backup) {
     throw error;
   }
   const current = getSettings();
-  const { qlab = {}, control = {}, departments, server = {}, lightingDesk, comms } = backup.setup;
+  const { qlab = {}, control = {}, departments, server = {}, lightingDesk, comms, secureAddress } = backup.setup;
   const pick = (value, fallback) => (value === undefined || value === null ? fallback : value);
   const currentDepartments = new Map(current.departments.map((department) => [department.id, department]));
 
@@ -77,6 +78,9 @@ export async function importSetup(backup) {
     },
     lightingDesk: lightingDesk && typeof lightingDesk === "object" ? { ...current.lightingDesk, ...lightingDesk } : current.lightingDesk,
     comms: comms && typeof comms === "object" ? { ...current.comms, ...comms } : current.comms,
+    secureAddress: secureAddress && typeof secureAddress === "object"
+      ? { ...current.secureAddress, ...secureAddress, token: pick(secureAddress.token, current.secureAddress.token) }
+      : current.secureAddress,
     departments: Array.isArray(departments)
       ? departments.map((department) => ({
         ...department,

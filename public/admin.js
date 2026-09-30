@@ -157,7 +157,13 @@ async function loadNetwork() {
     ["MIDI (HTTPS)", (url) => url.https ? `${url.https}/midi.html` : ""]
   ];
 
-  networkList.innerHTML = networkInfo.urls.map((url) => `
+  const groups = networkInfo.secureUrl
+    ? [{ interface: "Secure address", address: networkInfo.secureUrl.replace("https://", ""), http: networkInfo.secureUrl, https: networkInfo.secureUrl }, ...networkInfo.urls]
+    : networkInfo.urls;
+  const dnsIp = document.querySelector("#secureDnsIp");
+  if (dnsIp && networkInfo.urls[0]) dnsIp.textContent = networkInfo.urls[0].address;
+
+  networkList.innerHTML = groups.map((url) => `
     <div class="network-group">
       <strong>${escapeText(url.interface)} · ${escapeText(url.address)}</strong>
       <div class="qr-grid">
@@ -178,6 +184,79 @@ async function loadNetwork() {
 function escapeText(value) {
   return String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
+
+// --- Secure address ---
+
+const secureForm = document.querySelector("#secureForm");
+const secureMessage = document.querySelector("#secureMessage");
+let securePoll = null;
+
+async function loadSecure() {
+  const info = await fetch("/api/admin/secure-address", { cache: "no-store" }).then((response) => response.json()).catch(() => null);
+  if (!info) return;
+  if (!secureForm.contains(document.activeElement)) {
+    secureForm.elements.enabled.checked = info.enabled;
+    secureForm.elements.name.value = info.name;
+    secureForm.elements.dns.checked = info.dns;
+    secureForm.elements.token.placeholder = info.hasToken ? "Saved (paste a new one to change it)" : "Paste the token from duckdns.org";
+  }
+  renderSecure(info);
+}
+
+function renderSecure(info) {
+  const state = document.querySelector("#secureState");
+  const days = info.certificate ? Math.round((Date.parse(info.certificate.expiresAt) - Date.now()) / 86400000) : 0;
+  state.textContent = !info.enabled ? "· Off" : info.busy ? "· Working…" : info.ready ? "· ✓ Working" : "· Not ready";
+  const lines = [];
+  if (info.busy) lines.push(`${info.step || "Working"}… (this takes a minute or two)`);
+  else if (info.ready) lines.push(`✓ ${info.url} is ready. Certificate renews by itself (${days} days left).`);
+  if (info.lastError && !info.busy) lines.push(`⚠ ${info.lastError}`);
+  if (info.enabled && info.dns) {
+    const dns = info.dnsServer;
+    if (dns.error) lines.push(`⚠ Name server: ${dns.error}`);
+    else if (dns.running) lines.push(dns.answered ? `Name server: answered ${dns.answered} lookup${dns.answered === 1 ? "" : "s"} (last from ${dns.lastClient}).` : "Name server: running. Nobody has asked yet (set the router's DNS server to this computer).");
+  }
+  if (info.enabled && !info.ready && !info.busy && !info.lastError) lines.push(info.hasToken && info.name ? "Press Get certificate (needs internet)." : "Fill in the DuckDNS name and token.");
+  secureMessage.textContent = lines.join("\n");
+  clearTimeout(securePoll);
+  if (info.busy) securePoll = setTimeout(loadSecure, 2000);
+  else if (info.ready && !networkInfo?.secureUrl) loadNetwork();
+}
+
+async function saveSecure() {
+  const body = {
+    enabled: secureForm.elements.enabled.checked,
+    name: secureForm.elements.name.value,
+    dns: secureForm.elements.dns.checked
+  };
+  if (secureForm.elements.token.value.trim()) body.token = secureForm.elements.token.value.trim();
+  const result = await fetch("/api/admin/secure-address", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }).then((response) => response.json()).catch(() => ({ error: "Could not save." }));
+  if (result.error) {
+    secureMessage.textContent = result.error;
+    return false;
+  }
+  secureForm.elements.token.value = "";
+  document.activeElement?.blur();
+  return true;
+}
+
+secureForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (await saveSecure()) loadSecure();
+});
+
+document.querySelector("#secureRenew").addEventListener("click", async () => {
+  secureForm.elements.enabled.checked = true;
+  if (!(await saveSecure())) return;
+  const info = await fetch("/api/admin/secure-address/renew", { method: "POST" }).then((response) => response.json()).catch(() => null);
+  if (info) renderSecure(info);
+});
+
+loadSecure();
 
 // --- Departments ---
 
