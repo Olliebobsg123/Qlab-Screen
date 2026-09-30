@@ -208,6 +208,8 @@ function renderSecure(info) {
   const days = info.certificate ? Math.round((Date.parse(info.certificate.expiresAt) - Date.now()) / 86400000) : 0;
   state.textContent = !info.enabled ? "· Off" : info.busy ? "· Working…" : info.ready ? "· ✓ Working" : "· Not ready";
   const lines = [];
+  if (info.address) document.querySelector("#secureDnsIp").textContent = info.address;
+  if (info.enabled && info.publishedIp) lines.push(`DuckDNS points ${info.fullName} to ${info.publishedIp}${info.address && info.address !== info.publishedIp ? ` (updating to ${info.address}…)` : ""}.`);
   if (info.busy) lines.push(`${info.step || "Working"}… (this takes a minute or two)`);
   else if (info.ready) lines.push(`✓ ${info.url} is ready. Certificate renews by itself (${days} days left).`);
   if (info.lastError && !info.busy) lines.push(`⚠ ${info.lastError}`);

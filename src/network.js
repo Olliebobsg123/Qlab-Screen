@@ -1,3 +1,4 @@
+import dgram from "node:dgram";
 import { networkInterfaces } from "node:os";
 import QRCode from "qrcode";
 
@@ -12,6 +13,29 @@ export function lanAddresses() {
     }
   }
   return addresses;
+}
+
+// The address this computer actually uses on its main network (the one its internet goes through),
+// rather than whichever interface happens to be listed first (VPNs, a second adapter…).
+// No packets are sent: "connecting" a UDP socket just asks the system which route it would use.
+export function primaryAddress() {
+  const fallback = lanAddresses()[0]?.address || "";
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket("udp4");
+    let finished = false;
+    const done = (address) => {
+      if (finished) return;
+      finished = true;
+      socket.close();
+      resolve(address && lanAddresses().some((entry) => entry.address === address) ? address : fallback);
+    };
+    socket.on("error", () => done(""));
+    try {
+      socket.connect(53, "1.1.1.1", () => done(socket.address().address));
+    } catch {
+      done("");
+    }
+  });
 }
 
 // This computer's address on the same network as `clientIp` (a Mac on Ethernet and Wi-Fi has two).

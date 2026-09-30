@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import acme from "acme-client";
 import { SETTINGS_DIR } from "./config.js";
 import { configureDnsServer, dnsStatus } from "./dns-server.js";
-import { lanAddresses } from "./network.js";
+import { primaryAddress } from "./network.js";
 import { getSettings } from "./settings.js";
 
 // The secure address: a free name (a DuckDNS name like qlab-connect.duckdns.org) with a real,
@@ -24,13 +24,13 @@ const META_FILE = join(DIR, "meta.json");
 const RENEW_BEFORE_DAYS = 30;
 const CHECK_EVERY_MS = 6 * 3600000;
 const RETRY_MS = 3600000;
-const ADDRESS_CHECK_MS = 5 * 60000;
+const ADDRESS_CHECK_MS = 60000;
 const DIRECTORY = process.env.QLAB_ACME_STAGING === "1" ? acme.directory.letsencrypt.staging : acme.directory.letsencrypt.production;
 
 export const secureEvents = new EventEmitter();
 
 let credentials = null; // { cert, key, name, expiresAt, issuedAt }
-let status = { busy: false, step: "", lastError: "", lastTryAt: "", publishedIp: "" };
+let status = { busy: false, step: "", lastError: "", lastTryAt: "", publishedIp: "", address: "" };
 let retryTimer = null;
 let securePort = 0;
 
@@ -124,7 +124,7 @@ async function fetchCertificate() {
   try {
     // Checks the internet and the DuckDNS name/token first, with a clear message if either is off.
     status.step = "Checking DuckDNS";
-    const ip = lanAddresses()[0]?.address;
+    const ip = await primaryAddress();
     await duckdns(name, token, ip ? { ip } : {});
     if (ip) status.publishedIp = ip;
     await mkdir(DIR, { recursive: true });
@@ -185,7 +185,8 @@ async function orderCertificate(client, csr, name, fullName, token) {
 // Point the name at this computer's show-network address (for devices using internet DNS).
 async function publishAddress() {
   const { enabled, name, token } = config();
-  const ip = lanAddresses()[0]?.address;
+  const ip = await primaryAddress();
+  status.address = ip;
   if (!enabled || !name || !token || !ip || ip === status.publishedIp) return;
   await duckdns(name, token, { ip });
   status.publishedIp = ip;
