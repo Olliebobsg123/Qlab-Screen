@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import dgram from "node:dgram";
 import { networkInterfaces } from "node:os";
 import QRCode from "qrcode";
@@ -35,6 +36,34 @@ export function primaryAddress() {
     } catch {
       done("");
     }
+  });
+}
+
+// This computer's public-style (global) IPv6 address, if the network has IPv6. Routers don't block
+// names pointing at these the way they block names pointing at 192.168.x.x addresses, and
+// devices on the same network reach it directly. Prefers the stable address over the
+// temporary "privacy" ones macOS rotates.
+export function primaryIPv6() {
+  const isGlobal = (address) => /^[23][0-9a-f]{0,3}:/i.test(address);
+  const fromNode = () => {
+    for (const entries of Object.values(networkInterfaces())) {
+      for (const entry of entries || []) {
+        if (entry.family === "IPv6" && !entry.internal && isGlobal(entry.address)) return entry.address;
+      }
+    }
+    return "";
+  };
+  if (process.platform !== "darwin") return Promise.resolve(fromNode());
+  return new Promise((resolve) => {
+    execFile("ifconfig", { timeout: 3000 }, (error, stdout) => {
+      if (error) return resolve(fromNode());
+      const lines = String(stdout).split("\n").filter((line) => /^\s*inet6\s/.test(line));
+      const globals = lines
+        .map((line) => ({ address: line.trim().split(/\s+/)[1] || "", temporary: /temporary|deprecated|detached/.test(line), secured: /secured/.test(line) }))
+        .filter((entry) => isGlobal(entry.address) && !entry.address.includes("%"));
+      const pick = globals.find((entry) => entry.secured && !entry.temporary) || globals.find((entry) => !entry.temporary) || globals[0];
+      resolve(pick?.address || "");
+    });
   });
 }
 

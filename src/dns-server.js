@@ -12,6 +12,13 @@ const PORT = 53;
 const TTL = 60;
 const FORWARD_TIMEOUT_MS = 2500;
 const TYPE_A = 1;
+const TYPE_AAAA = 28;
+let ipv6 = "";
+
+// The computer's global IPv6 address (network.js primaryIPv6), for AAAA lookups of the name.
+export function setDnsIpv6(address) {
+  ipv6 = address || "";
+}
 
 let socket = null;
 let upstream = null;
@@ -101,7 +108,8 @@ function onQuery(message, remote) {
   if (question.name === answeredName) {
     status.answered += 1;
     status.lastClient = remote.address;
-    socket?.send(answer(message, question, question.type === TYPE_A ? addressFor(remote.address) : ""), remote.port, remote.address);
+    const address = question.type === TYPE_A ? addressFor(remote.address) : question.type === TYPE_AAAA ? ipv6 : "";
+    socket?.send(answer(message, question, address, question.type), remote.port, remote.address);
     return;
   }
   forward(message, remote);
@@ -170,7 +178,7 @@ function readQuestion(message) {
 
 // Our answer: the address for A lookups, an empty "no such record" for anything else
 // (AAAA, HTTPS…), so devices fall back to the IPv4 address.
-function answer(message, question, ip) {
+function answer(message, question, ip, type) {
   const header = Buffer.alloc(12);
   header.writeUInt16BE(message.readUInt16BE(0), 0);
   header.writeUInt16BE(0x8480 | (message.readUInt16BE(2) & 0x0100), 2); // reply, authoritative, recursion flags
@@ -178,16 +186,26 @@ function answer(message, question, ip) {
   header.writeUInt16BE(ip ? 1 : 0, 6);
   const parts = [header, message.subarray(12, question.end)];
   if (ip) {
-    const record = Buffer.alloc(16);
+    const data = type === TYPE_AAAA ? ipv6Bytes(ip) : Buffer.from(ip.split(".").map(Number));
+    const record = Buffer.alloc(12);
     record.writeUInt16BE(0xc00c, 0); // the name, pointing back at the question
-    record.writeUInt16BE(TYPE_A, 2);
+    record.writeUInt16BE(type, 2);
     record.writeUInt16BE(1, 4);
     record.writeUInt32BE(TTL, 6);
-    record.writeUInt16BE(4, 10);
-    ip.split(".").forEach((part, index) => record.writeUInt8(Number(part), 12 + index));
-    parts.push(record);
+    record.writeUInt16BE(data.length, 10);
+    parts.push(record, data);
   }
   return Buffer.concat(parts);
+}
+
+function ipv6Bytes(address) {
+  const [head, tail = ""] = address.split("::");
+  const groups = (part) => (part ? part.split(":") : []);
+  const missing = 8 - groups(head).length - groups(tail).length;
+  const all = [...groups(head), ...Array(address.includes("::") ? missing : 0).fill("0"), ...groups(tail)];
+  const bytes = Buffer.alloc(16);
+  all.slice(0, 8).forEach((group, index) => bytes.writeUInt16BE(parseInt(group, 16) || 0, index * 2));
+  return bytes;
 }
 
 function failure(message) {

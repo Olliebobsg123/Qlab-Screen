@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { EventEmitter } from "node:events";
 import acme from "acme-client";
 import { SETTINGS_DIR } from "./config.js";
-import { configureDnsServer, dnsStatus } from "./dns-server.js";
-import { primaryAddress } from "./network.js";
+import { configureDnsServer, dnsStatus, setDnsIpv6 } from "./dns-server.js";
+import { primaryAddress, primaryIPv6 } from "./network.js";
 import { getSettings } from "./settings.js";
 
 // The secure address: a free name (a DuckDNS name like qlab-connect.duckdns.org) with a real,
@@ -30,7 +30,7 @@ const DIRECTORY = process.env.QLAB_ACME_STAGING === "1" ? acme.directory.letsenc
 export const secureEvents = new EventEmitter();
 
 let credentials = null; // { cert, key, name, expiresAt, issuedAt }
-let status = { busy: false, step: "", lastError: "", lastTryAt: "", publishedIp: "", address: "" };
+let status = { busy: false, step: "", lastError: "", lastTryAt: "", publishedIp: "", address: "", publishedIpv6: "", ipv6: "" };
 let retryTimer = null;
 let securePort = 0;
 
@@ -124,9 +124,8 @@ async function fetchCertificate() {
   try {
     // Checks the internet and the DuckDNS name/token first, with a clear message if either is off.
     status.step = "Checking DuckDNS";
-    const ip = await primaryAddress();
-    await duckdns(name, token, ip ? { ip } : {});
-    if (ip) status.publishedIp = ip;
+    status.publishedIp = "";
+    await publishAddress();
     await mkdir(DIR, { recursive: true });
     const accountKey = await readFile(ACCOUNT_FILE).catch(async () => {
       const key = await acme.crypto.createPrivateKey();
@@ -185,11 +184,17 @@ async function orderCertificate(client, csr, name, fullName, token) {
 // Point the name at this computer's show-network address (for devices using internet DNS).
 async function publishAddress() {
   const { enabled, name, token } = config();
-  const ip = await primaryAddress();
+  const [ip, ipv6] = await Promise.all([primaryAddress(), primaryIPv6()]);
   status.address = ip;
-  if (!enabled || !name || !token || !ip || ip === status.publishedIp) return;
-  await duckdns(name, token, { ip });
+  status.ipv6 = ipv6;
+  setDnsIpv6(ipv6);
+  if (!enabled || !name || !token || !ip) return;
+  if (ip === status.publishedIp && ipv6 === status.publishedIpv6) return;
+  // An IPv6 address that's gone has to be cleared (DuckDNS keeps it otherwise).
+  if (status.publishedIpv6 && !ipv6) await duckdns(name, token, { clear: "true" });
+  await duckdns(name, token, ipv6 ? { ip, ipv6 } : { ip });
   status.publishedIp = ip;
+  status.publishedIpv6 = ipv6;
 }
 
 async function duckdns(name, token, params) {
